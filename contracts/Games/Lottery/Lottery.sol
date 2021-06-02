@@ -4,28 +4,12 @@ import "../../libs/Game/Game.sol";
 import "./LotteryPhase.sol";
 
 contract Lottery is Game {
-    address public lpToken;
-    bool private isOfficial;
-
-    uint256 nextPhase = 0;
-    uint8 private currentPhase;
-    LotteryPhase private lotteryPhase;
-
-    mapping(address => uint256) winners;
-    uint16[] winnableNumber;
-
-    struct PickedNumber {
-        uint16[] combo;
-        address[] users;
-    }
-
-    struct NumberStorage {
-        uint16[] numbers;
-    }
-
-    struct NumberIndexer {
-        uint256 id;
-        bool exists;
+    struct UserInfo {
+        uint256 ticketTier1;
+        uint256 ticketTier2;
+        uint256 ticketTier3;
+        bool notClaimed;
+        uint256[uint16] tickets;
     }
 
     struct RewardsDistribution {
@@ -38,9 +22,19 @@ contract Lottery is Game {
         uint256 totalAssigned;
     }
 
+    address public lpToken;
+    bool public isOfficial;
+
+    uint256 private nextPhase = 0;
+    uint8 private currentPhase;
+    LotteryPhase private lotteryPhase;
+
+    uint16[] private winnableNumber;
+    mapping(uint8 => uint256) private totalWinnersPerTier;
+    mapping(uint8 => uint256) private sharesPerTierWin;
+    mapping(address => UserInfo) private usersInfo;
+
     RewardsDistribution public rewardsDistribution;
-    PickedNumber[] pickedNumbers;
-    mapping(NumberStorage => NumberIndexer) indexes;
 
     function init(
         ICasino _casino,
@@ -67,6 +61,7 @@ contract Lottery is Game {
         lpToken = _lpToken;
         lotteryPhase = _lotteryPhase;
         currentPhase = uint8(Phase.INIT);
+        winnableNumber = casino.getRandomNumbers(4, 16, 1);
 
         if (IsOfficial) {
             rewardsDistribution = RewardsDistribution(
@@ -82,6 +77,14 @@ contract Lottery is Game {
         } else {
             rewardsDistribution = RewardsDistirbution(0, 0, 0, 0, 50, 0);
         }
+    }
+
+    function getUserTickets(address user)
+        external
+        view
+        returns (uint256[uint16] memory)
+    {
+        return usersInfo[user].tickets;
     }
 
     function starts() external onlyCreator {
@@ -125,35 +128,95 @@ contract Lottery is Game {
     }
 
     function enter(uint256 totalTicket) external {
-        uint256 tokenCost = totalTicket.mul(gameCost);
-        require(lpToken.balanceOf(msg.sender) >= tokenCost);
-
-        uint16[] memory numbers = casino.getRandomNumbers(4, 16, 1);
-
-        NumberStorage memory numberStorage = NumberStorage(numbers);
-        NumberIndexer storage indexer = indexes[numberStorage];
-        PickedNumber storage pNumber;
-
-        if (indexer.exists) {
-            pNumber = pickedNumbers[indexer.id];
-        } else {
-            indexer.id = pickedNumbers.length();
-            indexer.exists = true;
-            pNumber = PickedNumber(numbers, []);
-            pickedNumbers.push(pickedNumbers);
-
-            indexes[numberStorage] = indexer;
+        if (currentPhase == uint8(Phase.STARTING)) {
+            changePhase();
         }
 
-        lpToken.safeTransferFrom(msg.sender, address(this), tokenCost);
-        pNumber.users.push(msg.sender);
-        pickedNumbers[index.id] = pNumber;
+        if (currentPhase == uint8(Phase.OPEN)) {
+            uint256 tokenCost = totalTicket.mul(gameCost);
+            require(lpToken.balanceOf(msg.sender) >= tokenCost);
 
-        participants[msg.sender].push(numbers);
+            uint256[] memory numbers =
+                casino.getRandomNumbers(4 * totalTicket, 16, 1);
+
+            uint256 offset = 0;
+            for (uint256 i = 0; i < totalTicket; i++) {
+                uint16[] ticket =
+                    uint16[](
+                        numbers[i + offset],
+                        numbers[i + offset],
+                        numbers[i + offset],
+                        number[i + offset]
+                    );
+
+                _verifyWinnableTicket(ticket);
+                offset += 3;
+            }
+        }
     }
 
-    //Will be called by our automatic system, but user can call it if needed.
-    function changePhase() external {
+    function _verifyWinnableTicket(uint16[] ticket, address ticketOwner)
+        internal
+    {
+        bool[] sameNumber =
+            bool[](
+                _sameValueAt(0, ticket),
+                _sameValueAt(1, ticket),
+                _sameValueAt(2, ticket),
+                _sameValueAt(3, ticket)
+            );
+
+        UserInfo storage userInfo = usersInfo[ticketOwner];
+        userInfo.tickets.push(ticket);
+
+        if (ticket == winnableTicket) {
+            totalWinnersPerTier[1]++;
+            userInfo.ticketTier1++;
+            userInfo.notClaimed = true;
+        } else if (
+            (sameNumber[0] && sameNumber[1] && sameNumber[2]) ||
+            (sameNumber[1] && sameNumber[2] && sameNumber[3])
+        ) {
+            totalWinnersPerTier[2]++;
+            userInfo.ticketTier2++;
+            userInfo.notClaimed = true;
+        } else if (
+            (sameNumber[0] && sameNumber[1]) ||
+            (sameNumber[1] && sameNumber[2]) ||
+            (sameNumber[2] && sameNumber[3])
+        ) {
+            totalWinnersPerTier[3]++;
+            userInfo.ticketTier3++;
+            userInfo.notClaimed = true;
+        }
+
+        usersInfo[ticketOwner] = userInfo;
+    }
+
+    function claim() external {
+        if (currentPhase == uint8(Phase.OPEN)) {
+            changePhase();
+        }
+
+        UserInfo storage userInfo = usersInfo[msg.sender];
+
+        bool hasWon =
+            userInfo.ticketTier1 + userInfo.ticketTier2 + userInfo.ticketTier3 >
+                0;
+
+        require(hasWon && !userInfo.claimed, "Invalid state");
+
+        uint256 totalTokenWon = sharesPerTierWin[1].mul(userInfo.ticketTier1);
+        totalTokenWon += sharesPerTierWin[2].mul(userInfo.ticketTier2);
+        totalTokenWon += sharesPerTierWin[3].mul(userInfo.ticketTier3);
+
+        userInfo.claimed = true;
+        usersInfo[msg.sender] = userInfo;
+
+        lpToken.safeTransfer(msg.sender, totalTokenWon);
+    }
+
+    function changePhase() public {
         require(currentPhase < uint8(Phase.CLOSING), "Reached the last phase");
         require(nextPhase <= block.timestamp, "Time is not reached");
 
@@ -168,94 +231,29 @@ contract Lottery is Game {
     }
 
     function _end() internal {
-        winnableNumber = casino.getRandomNumbers(4, 16, 1);
-        NumberStorage storage numberStorage = NumberStorage(winnableNumber);
-        uint258 totalPool = lpToken.balanceOf(address(this));
+        uint256 totalToken = lpToken.balanceOf(address(this));
+        sharesPerTierWin[1] = totalToken
+            .mul(10000)
+            .div(rewardsDistribution.tier1)
+            .div(totalWinnersPerTier[1]);
+        sharesPerTierWin[2] = totalToken
+            .mul(10000)
+            .div(rewardsDistribution.tier2)
+            .div(totalWinnersPerTier[2]);
+        sharesPerTierWin[3] = totalToken
+            .mul(10000)
+            .div(rewardsDistribution.tier3)
+            .div(totalWinnersPerTier[3]);
 
-        mapping(uint8 => address[]) _winners;
-
-        for (uint256 i; i < pickedNumbers.length; i++) {
-            PickedNumber storage pNumber = pickedNumbers[i];
-            bool possibility3_1 =
-                sameValueAt(0, pNumber.combo) &&
-                    sameValueAt(1, pNumber.combo) &&
-                    sameValueAt(2, pNumber.combo);
-            bool possibility3_2 =
-                sameValueAt(1, pNumber.combo) &&
-                    sameValueAt(2, pNumber.combo) &&
-                    sameValueAt(3, pNumber.combo);
-
-            bool possibility2_1 =
-                sameValueAt(0, pNumber.combo) && sameValueAt(1, pNumber.combo);
-            bool possibility2_2 =
-                sameValueAt(1, pNumber.combo) && sameValueAt(2, pNumber.combo);
-            bool possibility2_3 =
-                sameValueAt(2, pNumber.combo) && sameValueAt(3, pNumber.combo);
-
-            //[F,T,T,T]
-            //[T,T,F,F]
-            //[F,F,T,T]
-            //[F,T,T,F]
-            if (pNumber.combo == winnableNumber) {
-                _winners[4] == pNumber.users;
-            } else if (possibility3_1 || possibility3_2) {
-                _winners[3].push(pNumber.users);
-            } else if (possibility2_1 || possibility2_2 || possibility2_3) {
-                _winners[2].push(pNumber.users);
-            }
-        }
-
-        //Sending for top winners
-
-        uint256 tier1Share =
-            totalPool.mul(10000).div(rewardsDistribution.tier1).div(
-                _winner[4].length
-            );
-
-        uint256 tier2Share =
-            totalPool.mul(10000).div(rewardsDistribution.tier2).div(
-                _winner[3].length
-            );
-
-        uint256 tier3Share =
-            totalPool.mul(10000).div(rewardsDistribution.tier3).div(
-                _winner[2].length
-            );
-
-        for (uint256 i = 0; i < _winners[4].length; i++) {
-            winners[_winners[4][i]] += tier1Share;
-        }
-        for (uint256 i = 0; i < _winners[3].length; i++) {
-            winners[_winners[3][i]] += tier2Share;
-        }
-        for (uint256 i = 0; i < _winners[2].length; i++) {
-            winners[_winners[2][i]] += tier3Share;
-        }
+        //Treasury
+        //FEE
     }
 
-    function sameValueAt(uint8 index, uint16[] numbers)
+    function _sameValueAt(uint8 index, uint16[] numbers)
         internal
         view
         returns (bool)
     {
         return numbers[index] == winnableNumber[index];
-    }
-
-    function claim() external {
-        if (currentPhase == uint8(Phase.OPEN)) {
-            changePhase();
-        }
-
-        if (winners[msg.sender] > 0) {
-            uint256 claimable = winners[msg.sender];
-
-            require(
-                lpToken.balanceOf(address(this)) >= claimable,
-                "Not enough token!"
-            );
-
-            winners[msg.sender] = 0;
-            lpToken.safeTransfer(msg.sender, claimable);
-        }
     }
 }

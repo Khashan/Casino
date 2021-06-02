@@ -63,7 +63,7 @@ abstract contract Game is IGame {
     }
 
     function requestDestroy() external isOwner {
-        require(canBeDestroyed, "This game cannot be destroyed")
+        require(canBeDestroyed, "This game cannot be destroyed");
         destroyEnds = block.timestamp + 2 days;
         isDestroying = true;
     }

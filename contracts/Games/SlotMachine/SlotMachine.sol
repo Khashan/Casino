@@ -2,7 +2,7 @@ pragma solidity ^0.8.4;
 
 import "../../libs/Game/Game.sol";
 
-contract Roulette is Game {
+contract SlotMatchine is Game {
     uint16 public cols;
     uint16 public rows;
 
