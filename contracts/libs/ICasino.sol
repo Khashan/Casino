@@ -1,6 +1,6 @@
 pragma solidity ^0.8.4;
 
-import "./IGame.sol";
+import "./Game/IGame.sol";
 import "./libs/IRandomizer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 

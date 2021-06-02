@@ -1,6 +1,6 @@
 pragma solidity ^0.8.4;
 
-import "../libs/Game.sol";
+import "../../libs/Game/Game.sol";
 
 contract Roulette is Game {
     uint16 public cols;
@@ -13,7 +13,7 @@ contract Roulette is Game {
 
     WinData[] public winPossibilities;
 
-    constructor(
+    function init(
         ICasino _casino,
         address _owner,
         address _manager,
@@ -21,7 +21,8 @@ contract Roulette is Game {
         uint256 _initialTokens,
         uint16 _cols,
         uint16 _rows
-    ) Game(_casino, _owner, _manager, _cost, _initialTokens) {
+    ) external {
+        super._init(_casino, _owner, _manager, _cost, _initialTokens);
         transferOwnership(_owner);
         gameCost = _cost;
         cols = _cols;

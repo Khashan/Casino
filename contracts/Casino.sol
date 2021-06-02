@@ -26,6 +26,7 @@ contract Casino is Ownable, ICasino {
         uint256 amount
     );
     event Migrate(ICasino indexed to);
+    event Win(address indexed user, address indexed game, uint256 amount);
 
     constructor(IERC20 _currencyToken, IRandomizer _random) {
         currencyToken = _currencyToken;
@@ -128,10 +129,12 @@ contract Casino is Ownable, ICasino {
     function giveToken(address _user, uint256 _amount) external override {
         IGame game = IGame(msg.sender);
         require(games[game], "Not a game");
-        require(gameWallets[game] >= _amount);
+        require(gameWallets[game] >= _amount, "Not enough token.");
 
         gameWallets[game] -= _amount;
         userWallets[_user] += _amount;
+
+        emit Win(_user, msg.sender, _amount);
     }
 
     function migrate(ICasino casino) external override {
