@@ -16,4 +16,6 @@ interface IGame {
     function cost() external view returns (uint256);
 
     function play(address user, uint256 _usedToken) external returns (bool);
+
+    function setCost(uint256 cost) external;
 }

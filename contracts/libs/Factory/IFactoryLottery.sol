@@ -15,4 +15,9 @@ interface IFactoryLottery {
     function setCreationCost(uint256 cost) external;
 
     function getLottery(uint256 index) external view returns (Lottery);
+
+    function getLotteryIndex(address lotteryAddress)
+        external
+        view
+        returns (uint256);
 }

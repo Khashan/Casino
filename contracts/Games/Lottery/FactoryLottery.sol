@@ -11,6 +11,8 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
     LotteryPhase lotteryPhase;
     ICasino casino;
 
+    mapping(address => uint256) indexLotteries;
+
     uint256 creationCost;
     Lottery masterLottery;
 
@@ -27,26 +29,51 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
     }
 
     function createLottery(
-        address _lpToken,
+        IERC20 _lpToken,
         uint256 _gameCost,
-        uint256 _initPool
+        uint256 _initPool,
+        uint256 _maxTicketPerUser
     ) external override {
+        require(
+            _lpTokne.balanceOf(_manager) >= _initPool,
+            "Not enough for the initial pool"
+        );
+
         Lottery lottery = Lottery(createClone(masterLottery));
         lottery.init(
             casino,
+            this,
             owner(),
             msg.sender,
             _lpToken,
-            lotteryPhase,
+            _maxTicketPerUser,
             _gameCost,
-            creationCost,
             _initPool
         );
         lotteries.push(child);
     }
 
+    function createNextLottery(Lottery oldLottery) external returns (Lottery) {
+        require(_isLottery(oldLottery), "Only lottery can call this");
+        return Lottery(createClone(masterLottery));
+    }
+
     function setCreationCost(uint256 cost) external override {
         creationCost = cost;
+    }
+
+    function _isLottery(address lotteryAddress) internal view returns (bool) {
+        uint256 index = indexLotteries[lotteryAddress];
+        return lotteryAddress = lotteries[index];
+    }
+
+    function getLotteryIndex(address lotteryAddress)
+        external
+        view
+        override
+        returns (uint256)
+    {
+        return indexLotteries[lotteryAddress];
     }
 
     function getLottery(uint256 index)

@@ -10,10 +10,10 @@ contract LotteryPhase is Ownable {
     event PhaseTimer(uint8 phaseId, uint256 timer);
 
     constructor() {
-        phaseTimer[Phase.INIT] = 0;
+        phaseTimer[Phase.INIT] = 2 hours;
         phaseTimer[Phase.STARTING] = 10 hours;
         phaseTimer[Phase.OPEN] = 12 hours;
-        phaseTimer[Phase.CLOSING] = 2 hours;
+        phaseTimer[Phase.CLOSING] = 0;
     }
 
     function getPhaseTimer(uint8 phaseId) external view returns (uint256) {

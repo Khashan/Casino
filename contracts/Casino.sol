@@ -16,6 +16,7 @@ contract Casino is Ownable, ICasino {
     mapping(IGame => bool) public games;
 
     address private casinoBank;
+    address public treasury;
     IRandomizer private randomizer;
 
     event BuyToken(address indexed user, uint256 amount);

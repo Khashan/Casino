@@ -38,6 +38,7 @@ abstract contract Game is IGame {
         require(!isInitialized, "Contract already initialized");
         casino = _casino;
         owner = _owner;
+
         casino.takeToken(_creator, _initialTokens);
 
         gameCost = _cost;
@@ -78,6 +79,14 @@ abstract contract Game is IGame {
         selfdestruct(payable(owner));
     }
 
+    function applyBPS(uint256 amount, uint256 bps)
+        internal
+        view
+        returns (uint256)
+    {
+        return amount.mul(10000).div(bps);
+    }
+
     modifier isCreator {
         require(creator == msg.sender);
         _;
@@ -85,6 +94,11 @@ abstract contract Game is IGame {
 
     modifier isOwner {
         require(owner == msg.sender, "You are not owner");
+        _;
+    }
+
+    modifier isAdmin {
+        require(creator == msg.sender || owner == msg.sender, "Not admin");
         _;
     }
 }

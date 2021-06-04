@@ -1,13 +1,13 @@
 pragma solidity ^0.8.4;
 
 import "../../libs/Game/Game.sol";
-import "./LotteryPhase.sol";
+import "./FactoryLottery.sol";
 
 contract Lottery is Game {
+    enum Tiers {TIER1, TIER2, TIER3, TREASURY}
+
     struct UserInfo {
-        uint256 ticketTier1;
-        uint256 ticketTier2;
-        uint256 ticketTier3;
+        mapping(Tiers => uint256) ticketTiers;
         bool notClaimed;
         uint256[uint16] tickets;
     }
@@ -25,25 +25,42 @@ contract Lottery is Game {
     address public lpToken;
     bool public isOfficial;
 
+    uint256 private maxTicketPerUser;
+
     uint256 private nextPhase = 0;
-    uint8 private currentPhase;
-    LotteryPhase private lotteryPhase;
+    uint8 public currentPhase;
 
     uint16[] private winnableNumber;
-    mapping(uint8 => uint256) private totalWinnersPerTier;
-    mapping(uint8 => uint256) private sharesPerTierWin;
+    mapping(Tiers => uint256) private totalWinnersPerTier;
+    mapping(Tiers => uint256) private sharesPerTierWin;
     mapping(address => UserInfo) private usersInfo;
+
+    FactoryLottery public factory;
 
     RewardsDistribution public rewardsDistribution;
 
+    function clone(Lottery oldLottery) external returns (address) {
+        super._init(
+            oldLottery.casino,
+            oldLottery.owner,
+            oldLottery.creator,
+            oldLottery.gameCost,
+            0,
+            false
+        );
+        transferOwnership(oldLottery.owner);
+
+        return address(this);
+    }
+
     function init(
         ICasino _casino,
+        FactoryLottery _factory,
         address _owner,
         address _manager,
         IERC20 _lpToken,
-        LotteryPhase _lotteryPhase,
+        uint256 _maxTicketPerUser,
         uint256 _gameCost,
-        uint256 _creationCost,
         uint256 _initPool
     ) external {
         require(
@@ -55,6 +72,17 @@ contract Lottery is Game {
         super._init(_casino, _owner, _manager, _gameCost, _creationCost, false);
         _lpToken.safeTransferFrom(_manager, address(this), amount);
         transferOwnership(_owner);
+    }
+
+    function _initLottery(
+        FactoryLottery _factory,
+        address _owner,
+        address _manager,
+        IERC20 _lpToken,
+        uint256 _maxTicketPerUser,
+        uint256 _gameCost
+    ) internal {
+        factory = _factory;
         gameCost = _gameCost;
         isOfficial = _manager == _owner;
 
@@ -62,7 +90,12 @@ contract Lottery is Game {
         lotteryPhase = _lotteryPhase;
         currentPhase = uint8(Phase.INIT);
         winnableNumber = casino.getRandomNumbers(4, 16, 1);
+        maxTicketPerUser = _maxTicketPerUser;
 
+        _initDefaultDistribution();
+    }
+
+    function _initDefaultDistribution() internal {
         if (IsOfficial) {
             rewardsDistribution = RewardsDistribution(
                 400,
@@ -73,7 +106,9 @@ contract Lottery is Game {
                 50,
                 (450 + 250 + 150 + 100 + 50)
             );
-            _starts();
+            nextPhase =
+                block.timestamp +
+                lotteryPhase.getPhaseTimer(currentPhase);
         } else {
             rewardsDistribution = RewardsDistirbution(0, 0, 0, 0, 50, 0);
         }
@@ -170,23 +205,23 @@ contract Lottery is Game {
         userInfo.tickets.push(ticket);
 
         if (ticket == winnableTicket) {
-            totalWinnersPerTier[1]++;
-            userInfo.ticketTier1++;
+            totalWinnersPerTier[Tiers.TIER1]++;
+            userInfo.ticketTiers[Tier.TIER1]++;
             userInfo.notClaimed = true;
         } else if (
             (sameNumber[0] && sameNumber[1] && sameNumber[2]) ||
             (sameNumber[1] && sameNumber[2] && sameNumber[3])
         ) {
-            totalWinnersPerTier[2]++;
-            userInfo.ticketTier2++;
+            totalWinnersPerTier[Tiers.TIER2]++;
+            userInfo.ticketTiers[Tiers.TIER2]++;
             userInfo.notClaimed = true;
         } else if (
             (sameNumber[0] && sameNumber[1]) ||
             (sameNumber[1] && sameNumber[2]) ||
             (sameNumber[2] && sameNumber[3])
         ) {
-            totalWinnersPerTier[3]++;
-            userInfo.ticketTier3++;
+            totalWinnersPerTier[Tiers.TIER3]++;
+            userInfo.ticketTiers[Tiers.TIER3]++;
             userInfo.notClaimed = true;
         }
 
@@ -199,24 +234,39 @@ contract Lottery is Game {
         }
 
         UserInfo storage userInfo = usersInfo[msg.sender];
+        uint256 totalWon = _getTotalWonByUser(userInfo);
 
-        bool hasWon =
-            userInfo.ticketTier1 + userInfo.ticketTier2 + userInfo.ticketTier3 >
-                0;
-
-        require(hasWon && !userInfo.claimed, "Invalid state");
-
-        uint256 totalTokenWon = sharesPerTierWin[1].mul(userInfo.ticketTier1);
-        totalTokenWon += sharesPerTierWin[2].mul(userInfo.ticketTier2);
-        totalTokenWon += sharesPerTierWin[3].mul(userInfo.ticketTier3);
+        require(totalWon > 0 && !userInfo.claimed, "Invalid state");
 
         userInfo.claimed = true;
         usersInfo[msg.sender] = userInfo;
 
-        lpToken.safeTransfer(msg.sender, totalTokenWon);
+        lpToken.safeTransfer(msg.sender, _getTotalWonByUser());
+    }
+
+    function _getTotalWonByUser(UserInfo storage userInfo)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 totalTokenWon =
+            sharesPerTierWin[Tiers.TIER1].mul(
+                userInfo.ticketTiers[Tiers.TIER1]
+            );
+
+        totalTokenWon.add(
+            sharesPerTierWin[Tiers.TIER2].mul(userInfo.ticketTiers[Tiers.TIER2])
+        );
+
+        totalTokenWon.add(
+            sharesPerTierWin[Tiers.TIER3].mul(userInfo.ticketTiers[Tiers.TIER3])
+        );
+
+        return totalTokenWon;
     }
 
     function changePhase() public {
+        require(nextPhase != 0, "Lottery isn't started");
         require(currentPhase < uint8(Phase.CLOSING), "Reached the last phase");
         require(nextPhase <= block.timestamp, "Time is not reached");
 
@@ -230,24 +280,70 @@ contract Lottery is Game {
         }
     }
 
+    function setCost(uint256 ticketCost) external override isCreator {
+        gameCost = ticketCost;
+    }
+
     function _end() internal {
         uint256 totalToken = lpToken.balanceOf(address(this));
-        sharesPerTierWin[1] = totalToken
-            .mul(10000)
-            .div(rewardsDistribution.tier1)
-            .div(totalWinnersPerTier[1]);
-        sharesPerTierWin[2] = totalToken
-            .mul(10000)
-            .div(rewardsDistribution.tier2)
-            .div(totalWinnersPerTier[2]);
-        sharesPerTierWin[3] = totalToken
-            .mul(10000)
-            .div(rewardsDistribution.tier3)
-            .div(totalWinnersPerTier[3]);
+        _distributeRewards(totalToken);
 
-        //Treasury
-        //FEE
+        uint256 tokenLeft = totalToken.sub(_getTotalDistributedTokens());
+
+        lpToken.safeTransfer(casino.treasury, totalTokenTreasury);
+
+        if (isOfficial) {
+            _prepareNextLottery(tokenLeft);
+        } else {
+            lpToken.safeTransfer(creator, tokenLeft);
+        }
     }
+
+    function _distributeRewards(uint256 totalToken) internal {
+        sharesPerTierWin[Tiers.TIER1] = applyBPS(
+            totalToken,
+            rewardsDistribution
+                .tier1
+        )
+            .div(totalWinnersPerTier[Tiers.TIER1]);
+
+        sharesPerTierWin[Tiers.TIER2] = applyBPS(
+            totalToken,
+            rewardsDistribution
+                .tier2
+        )
+            .div(totalWinnersPerTier[Tiers.TIER2]);
+
+        sharesPerTierWin[Tiers.TIER3] = applyBPS(
+            totalToken,
+            rewardsDistribution
+                .tier3
+        )
+            .div(totalWinnersPerTier[Tiers.TIER3]);
+
+        sharesPerTierWin[Tiers.TREASURY] = applyBPS(
+            totalToken,
+            rewardsDistribution.treasury
+        );
+    }
+
+    function _getTotalDistributedTokens() internal view returns (uint256) {
+        uint256 totalTokenForTier1 =
+            sharesPerTierWin[Tiers.TIER1].mul(totalWinnersPerTier[Tiers.TIER1]);
+        uint256 totalTokenForTier2 =
+            sharesPerTierWin[Tiers.TIER2].mul(totalWinnersPerTier[Tiers.TIER2]);
+        uint256 totalTokenForTier3 =
+            sharesPerTierWin[Tiers.TIER3].mul(totalWinnersPerTier[Tiers.TIER3]);
+        uint256 totalTokenTreasury = sharesPerTierWin[Tiers.TREASURY];
+
+        return
+            totalTokenForTier1
+                .add(totalTokenForTier2)
+                .add(totalTokenForTier3)
+                .add(totalTokenTreasury);
+    }
+
+    function _prepareNextLottery(uint256 tokenLeft) internal {}
 
     function _sameValueAt(uint8 index, uint16[] numbers)
         internal
