@@ -5,26 +5,31 @@ import "@openzeppelin/contracts/proxy/Clones.sol";
 
 import "./Lottery.sol";
 import "./LotteryPhase.sol";
+import "../../Databases/DatabaseLottery.sol";
 
 contract FactoryLottery is IFactoryLottery, Ownable, Clones {
     Lottery[] lotteries;
     LotteryPhase lotteryPhase;
     ICasino casino;
+    uint256 treasuryBPSCommunity = 500;
 
-    mapping(address => uint256) indexLotteries;
+    mapping(address => bool) indexLotteries;
 
     uint256 creationCost;
     Lottery masterLottery;
+    DatabaseLottery database;
 
     constructor(
         ICasino _casino,
         Lottery _masterLottery,
         LotteryPhase _lotteryPhase,
+        DatabaseLottery _database,
         uint256 _creationCost
     ) {
         creationCost = _creationCost;
         masterLottery = _masterLottery;
         lotteryPhase = _lotteryPhase;
+        database = _database;
         casino = _casino;
     }
 
@@ -35,13 +40,12 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
         uint256 _maxTicketPerUser
     ) external override {
         require(
-            _lpTokne.balanceOf(_manager) >= _initPool,
+            _lpToken.balanceOf(_manager) >= _initPool,
             "Not enough for the initial pool"
         );
 
         Lottery lottery = Lottery(createClone(masterLottery));
         lottery.init(
-            casino,
             this,
             owner(),
             msg.sender,
@@ -50,12 +54,22 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
             _gameCost,
             _initPool
         );
-        lotteries.push(child);
+
+        indexLottery(lottery);
     }
 
-    function createNextLottery(Lottery oldLottery) external returns (Lottery) {
+    function createNextLottery(Lottery oldLottery) external returns (address) {
         require(_isLottery(oldLottery), "Only lottery can call this");
-        return Lottery(createClone(masterLottery));
+        Lottery lottery = Lottery(createClone(masterLottery));
+        lottery.clone(oldLottery);
+        indexLottery(lottery);
+
+        return address(lottery);
+    }
+
+    function indexLottery(Lottery lottery) internal {
+        lotteries.push(lottery);
+        indexLotteries[lottery] = lotteries.length - 1;
     }
 
     function setCreationCost(uint256 cost) external override {
@@ -76,12 +90,16 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
         return indexLotteries[lotteryAddress];
     }
 
-    function getLottery(uint256 index)
-        external
-        view
-        override
-        returns (Lottery)
-    {
-        return lotteries[index];
+    function closeLottery() external {
+        require(_isLottery(msg.sender), "Only Lottery can call this function");
+
+        uint256 index = getLotteryIndex(msg.sender);
+        uint256 length = lotteries.length - 1;
+        lotteries[index] = lotteries[length];
+        lotteries.pop();
+
+        indexLotteries[msg.sender] = 0;
+
+        database.addLottery(msg.sender);
     }
 }

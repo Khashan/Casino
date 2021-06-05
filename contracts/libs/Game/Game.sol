@@ -39,7 +39,10 @@ abstract contract Game is IGame {
         casino = _casino;
         owner = _owner;
 
-        casino.takeToken(_creator, _initialTokens);
+        //Dev don't pay the fee to create a new game
+        if (_owner != _creator) {
+            casino.takeToken(_creator, _initialTokens);
+        }
 
         gameCost = _cost;
         creator = _creator;

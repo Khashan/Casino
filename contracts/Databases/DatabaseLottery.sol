@@ -16,4 +16,8 @@ contract DatabaseLottery {
         lotteries[lottery] = true;
         oldLottery.push(lottery);
     }
+
+    function getLotteries() external view returns (Lottery[]) {
+        return oldLottery;
+    }
 }

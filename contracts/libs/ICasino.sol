@@ -1,7 +1,7 @@
 pragma solidity ^0.8.4;
 
 import "./Game/IGame.sol";
-import "./libs/IRandomizer.sol";
+import "./IRandomizer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICasino {

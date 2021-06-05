@@ -24,11 +24,11 @@ contract Lottery is Game {
 
     address public lpToken;
     bool public isOfficial;
-
     uint256 private maxTicketPerUser;
 
     uint256 private nextPhase = 0;
     uint8 public currentPhase;
+    RewardsDistribution public rewardsDistribution;
 
     uint16[] private winnableNumber;
     mapping(Tiers => uint256) private totalWinnersPerTier;
@@ -37,9 +37,7 @@ contract Lottery is Game {
 
     FactoryLottery public factory;
 
-    RewardsDistribution public rewardsDistribution;
-
-    function clone(Lottery oldLottery) external returns (address) {
+    function clone(Lottery oldLottery) external {
         super._init(
             oldLottery.casino,
             oldLottery.owner,
@@ -48,49 +46,53 @@ contract Lottery is Game {
             0,
             false
         );
-        transferOwnership(oldLottery.owner);
 
-        return address(this);
+        transferOwnership(_owner);
+        _initLottery(_factory, _lpToken, _maxTicketPerUser, _gameCost);
     }
 
     function init(
-        ICasino _casino,
         FactoryLottery _factory,
         address _owner,
-        address _manager,
+        address _creator,
         IERC20 _lpToken,
         uint256 _maxTicketPerUser,
         uint256 _gameCost,
         uint256 _initPool
-    ) external {
+    ) public {
+        super._init(
+            _factory.casino,
+            _owner,
+            _creator,
+            _gameCost,
+            _creationCost,
+            false
+        );
         require(
-            _lpTokne.balanceOf(_manager) >= _initPool,
+            _lpTokne.balanceOf(_creator) >= _initPool,
             "Not enough for the initial pool"
         );
         require(_initPool != 0, "Initial Pool cannot be 0");
 
-        super._init(_casino, _owner, _manager, _gameCost, _creationCost, false);
-        _lpToken.safeTransferFrom(_manager, address(this), amount);
+        _lpToken.safeTransferFrom(_creator, address(this), amount);
+
         transferOwnership(_owner);
+        _initLottery(_factory, _lpToken, _maxTicketPerUser);
     }
 
     function _initLottery(
         FactoryLottery _factory,
-        address _owner,
-        address _manager,
         IERC20 _lpToken,
-        uint256 _maxTicketPerUser,
-        uint256 _gameCost
+        uint256 _maxTicketPerUser
     ) internal {
+        isOfficial = creator == owner;
         factory = _factory;
-        gameCost = _gameCost;
-        isOfficial = _manager == _owner;
-
         lpToken = _lpToken;
+        maxTicketPerUser = _maxTicketPerUser;
+
         lotteryPhase = _lotteryPhase;
         currentPhase = uint8(Phase.INIT);
         winnableNumber = casino.getRandomNumbers(4, 16, 1);
-        maxTicketPerUser = _maxTicketPerUser;
 
         _initDefaultDistribution();
     }
@@ -125,10 +127,6 @@ contract Lottery is Game {
     function starts() external onlyCreator {
         require(currentPhase == Phase.Init, "Already Started");
         require(isValidDistribution(), "Invalid distribution");
-        _starts();
-    }
-
-    function _starts() internal {
         currentPhase = uint8(Phase.STARTED);
         nextPhase = block.timestamp + lotteryPhase.getPhaseTimer(currentPhase);
     }
@@ -138,21 +136,23 @@ contract Lottery is Game {
         uint256 _tier2,
         uint256 _tier3,
         uint256 _owner
-    ) {
+    ) external isCreator {
         require(
             !isOfficial,
             "Official Lottery can not change their rewards distribution"
         );
 
-        uint256 total = _tier1 + _tier2 + _tier3 + _owner + 50;
-        require(total == 1000, "Distribution is not valid");
+        uint256 total =
+            _tier1 + _tier2 + _tier3 + _owner + factory.treasuryBPSCommunity;
+
+        require(total == 10000, "Distribution is not valid");
 
         rewardsDistribution = RewardsDistribution(
             _tier1,
             _tier2,
             _tier3,
             _owner,
-            50,
+            factory.treasuryBPSCommunity,
             0,
             total
         );
@@ -163,6 +163,15 @@ contract Lottery is Game {
     }
 
     function enter(uint256 totalTicket) external {
+        UserInfo storage userInfo = usersInfo[msg.sender];
+
+        if (maxTicketPerUser != 0) {
+            require(
+                userInfo.tickets.length + totalTicket <= maxTicketPerUser,
+                "You have reached the max ticket entries"
+            );
+        }
+
         if (currentPhase == uint8(Phase.STARTING)) {
             changePhase();
         }
@@ -184,7 +193,7 @@ contract Lottery is Game {
                         number[i + offset]
                     );
 
-                _verifyWinnableTicket(ticket);
+                _verifyWinnableTicket(ticket, msg.sender);
                 offset += 3;
             }
         }
@@ -244,6 +253,15 @@ contract Lottery is Game {
         lpToken.safeTransfer(msg.sender, _getTotalWonByUser());
     }
 
+    function getTotalWonByUser(address user) external view returns (uint256) {
+        if (currentPhase != uint8(Phase.CLOSING)) {
+            return 0;
+        }
+
+        UserInfo storage userInfo = usersInfo[user];
+        return _getTotalWonByUser(userInfo);
+    }
+
     function _getTotalWonByUser(UserInfo storage userInfo)
         internal
         view
@@ -273,6 +291,7 @@ contract Lottery is Game {
         nextPhase =
             block.timestamp +
             lotteryPhase.getPhaseTimer(currentPhase + 1);
+
         currentPhase++;
 
         if (currentPhase == uint8(Phase.CLOSING)) {
@@ -297,6 +316,8 @@ contract Lottery is Game {
         } else {
             lpToken.safeTransfer(creator, tokenLeft);
         }
+
+        factory.closeLottery();
     }
 
     function _distributeRewards(uint256 totalToken) internal {
@@ -343,7 +364,10 @@ contract Lottery is Game {
                 .add(totalTokenTreasury);
     }
 
-    function _prepareNextLottery(uint256 tokenLeft) internal {}
+    function _prepareNextLottery(uint256 tokenLeft) internal {
+        address newLottery = factory.createNextLottery(this);
+        lpToken.safeTransfer(newLottery, lpToken.balanceof(address(this)));
+    }
 
     function _sameValueAt(uint8 index, uint16[] numbers)
         internal
