@@ -59,14 +59,6 @@ contract Casino is Ownable, ICasino {
         games[_game] = _status;
     }
 
-    function joinGame(IGame _game, uint256 _usedToken)
-        external
-        override
-        hasTokens(_usedToken)
-    {
-        _game.play(msg.sender, _usedToken);
-    }
-
     function buyToken(uint256 _amount) external override hasCurrency(_amount) {
         require(_amount > 0, "Not valid amount");
 
@@ -163,8 +155,10 @@ contract Casino is Ownable, ICasino {
         require(_quantity > 0, "Qty needs to be at least 1");
 
         bytes32 request =
-            randomizer.requestRandomness(
-                uint256(keccak256(block.timestamp, block.difficulty))
+            randomizer.getRandomNumber(
+                uint256(
+                    keccak256(abi.encode(block.timestamp, block.difficulty))
+                )
             );
 
         return randomizer.fetchRandom(request, _quantity, _mod, _offset);

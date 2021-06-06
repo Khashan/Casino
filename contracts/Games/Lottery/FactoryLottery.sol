@@ -3,25 +3,24 @@ pragma solidity ^0.8.4;
 import "../../libs/Factory/IFactoryLottery.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 
-import "./Lottery.sol";
 import "./LotteryPhase.sol";
 import "../../Databases/DatabaseLottery.sol";
 
-contract FactoryLottery is IFactoryLottery, Ownable, Clones {
+contract FactoryLottery is IFactoryLottery, Ownable {
     Lottery[] lotteries;
-    LotteryPhase lotteryPhase;
-    ICasino casino;
+    LotteryPhase public lotteryPhase;
+    ICasino public casino;
     uint256 treasuryBPSCommunity = 500;
 
-    mapping(address => bool) indexLotteries;
+    mapping(address => uint256) indexLotteries;
 
-    uint256 creationCost;
-    Lottery masterLottery;
+    uint256 public creationCost;
+    address masterLottery;
     DatabaseLottery database;
 
     constructor(
         ICasino _casino,
-        Lottery _masterLottery,
+        address _masterLottery,
         LotteryPhase _lotteryPhase,
         DatabaseLottery _database,
         uint256 _creationCost
@@ -40,11 +39,11 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
         uint256 _maxTicketPerUser
     ) external override {
         require(
-            _lpToken.balanceOf(_manager) >= _initPool,
+            _lpToken.balanceOf(msg.sender) >= _initPool,
             "Not enough for the initial pool"
         );
 
-        Lottery lottery = Lottery(createClone(masterLottery));
+        Lottery lottery = Lottery(Clones.clone(masterLottery));
         lottery.init(
             this,
             owner(),
@@ -58,9 +57,13 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
         indexLottery(lottery);
     }
 
-    function createNextLottery(Lottery oldLottery) external returns (address) {
-        require(_isLottery(oldLottery), "Only lottery can call this");
-        Lottery lottery = Lottery(createClone(masterLottery));
+    function createNextLottery(Lottery oldLottery)
+        external
+        override
+        returns (address)
+    {
+        require(_isLottery(address(oldLottery)), "Only lottery can call this");
+        Lottery lottery = Lottery(Clones.clone(masterLottery));
         lottery.clone(oldLottery);
         indexLottery(lottery);
 
@@ -69,7 +72,7 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
 
     function indexLottery(Lottery lottery) internal {
         lotteries.push(lottery);
-        indexLotteries[lottery] = lotteries.length - 1;
+        indexLotteries[address(lottery)] = lotteries.length - 1;
     }
 
     function setCreationCost(uint256 cost) external override {
@@ -78,13 +81,12 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
 
     function _isLottery(address lotteryAddress) internal view returns (bool) {
         uint256 index = indexLotteries[lotteryAddress];
-        return lotteryAddress = lotteries[index];
+        return lotteryAddress == address(lotteries[index]);
     }
 
     function getLotteryIndex(address lotteryAddress)
-        external
+        internal
         view
-        override
         returns (uint256)
     {
         return indexLotteries[lotteryAddress];
@@ -100,6 +102,6 @@ contract FactoryLottery is IFactoryLottery, Ownable, Clones {
 
         indexLotteries[msg.sender] = 0;
 
-        database.addLottery(msg.sender);
+        database.addLottery(Lottery(msg.sender));
     }
 }

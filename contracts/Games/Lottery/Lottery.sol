@@ -4,12 +4,14 @@ import "../../libs/Game/Game.sol";
 import "./FactoryLottery.sol";
 
 contract Lottery is Game {
+    using SafeERC20 for IERC20;
+
     enum Tiers {TIER1, TIER2, TIER3, TREASURY}
 
     struct UserInfo {
         mapping(Tiers => uint256) ticketTiers;
         bool notClaimed;
-        uint256[uint16] tickets;
+        Ticket[] tickets;
     }
 
     struct RewardsDistribution {
@@ -22,9 +24,13 @@ contract Lottery is Game {
         uint256 totalAssigned;
     }
 
-    address public lpToken;
+    struct Ticket {
+        uint16[] numbers;
+    }
+
+    IERC20 public lpToken;
     bool public isOfficial;
-    uint256 private maxTicketPerUser;
+    uint256 public maxTicketPerUser;
 
     uint256 private nextPhase = 0;
     uint8 public currentPhase;
@@ -36,19 +42,23 @@ contract Lottery is Game {
     mapping(address => UserInfo) private usersInfo;
 
     FactoryLottery public factory;
+    LotteryPhase lotteryPhase;
 
     function clone(Lottery oldLottery) external {
         super._init(
-            oldLottery.casino,
-            oldLottery.owner,
-            oldLottery.creator,
-            oldLottery.gameCost,
+            oldLottery.casino(),
+            oldLottery.owner(),
+            oldLottery.creator(),
+            oldLottery.gameCost(),
             0,
             false
         );
 
-        transferOwnership(_owner);
-        _initLottery(_factory, _lpToken, _maxTicketPerUser, _gameCost);
+        _initLottery(
+            oldLottery.factory(),
+            oldLottery.lpToken(),
+            oldLottery.maxTicketPerUser()
+        );
     }
 
     function init(
@@ -61,22 +71,21 @@ contract Lottery is Game {
         uint256 _initPool
     ) public {
         super._init(
-            _factory.casino,
+            _factory.casino(),
             _owner,
             _creator,
             _gameCost,
-            _creationCost,
+            _factory.creationCost(),
             false
         );
         require(
-            _lpTokne.balanceOf(_creator) >= _initPool,
+            _lpToken.balanceOf(_creator) >= _initPool,
             "Not enough for the initial pool"
         );
         require(_initPool != 0, "Initial Pool cannot be 0");
 
-        _lpToken.safeTransferFrom(_creator, address(this), amount);
+        _lpToken.safeTransferFrom(_creator, address(this), _initPool);
 
-        transferOwnership(_owner);
         _initLottery(_factory, _lpToken, _maxTicketPerUser);
     }
 
@@ -89,16 +98,16 @@ contract Lottery is Game {
         factory = _factory;
         lpToken = _lpToken;
         maxTicketPerUser = _maxTicketPerUser;
+        lotteryPhase = _factory.lotteryPhase();
 
-        lotteryPhase = _lotteryPhase;
-        currentPhase = uint8(Phase.INIT);
-        winnableNumber = casino.getRandomNumbers(4, 16, 1);
+        currentPhase = uint8(LotteryPhase.Phase.INIT);
+        winnableNumber = uint16[](casino.getRandomNumbers(4, 16, 1));
 
         _initDefaultDistribution();
     }
 
     function _initDefaultDistribution() internal {
-        if (IsOfficial) {
+        if (isOfficial) {
             rewardsDistribution = RewardsDistribution(
                 400,
                 250,
@@ -112,22 +121,25 @@ contract Lottery is Game {
                 block.timestamp +
                 lotteryPhase.getPhaseTimer(currentPhase);
         } else {
-            rewardsDistribution = RewardsDistirbution(0, 0, 0, 0, 50, 0);
+            rewardsDistribution = RewardsDistribution(0, 0, 0, 0, 50, 0, 50);
         }
     }
 
     function getUserTickets(address user)
         external
         view
-        returns (uint256[uint16] memory)
+        returns (Ticket[] memory)
     {
         return usersInfo[user].tickets;
     }
 
-    function starts() external onlyCreator {
-        require(currentPhase == Phase.Init, "Already Started");
+    function starts() external isCreator {
+        require(
+            currentPhase == uint8(LotteryPhase.Phase.INIT),
+            "Already Started"
+        );
         require(isValidDistribution(), "Invalid distribution");
-        currentPhase = uint8(Phase.STARTED);
+        currentPhase = uint8(lotteryPhase.Phase.STARTED);
         nextPhase = block.timestamp + lotteryPhase.getPhaseTimer(currentPhase);
     }
 
@@ -158,11 +170,11 @@ contract Lottery is Game {
         );
     }
 
-    function isValidDistribution() external view returns (bool) {
+    function isValidDistribution() public view returns (bool) {
         return rewardsDistribution.totalAssigned == 1000;
     }
 
-    function enter(uint256 totalTicket) external {
+    function play(uint256 totalTicket) external override returns (bool) {
         UserInfo storage userInfo = usersInfo[msg.sender];
 
         if (maxTicketPerUser != 0) {
@@ -172,11 +184,11 @@ contract Lottery is Game {
             );
         }
 
-        if (currentPhase == uint8(Phase.STARTING)) {
+        if (currentPhase == uint8(LotteryPhase.Phase.STARTING)) {
             changePhase();
         }
 
-        if (currentPhase == uint8(Phase.OPEN)) {
+        if (currentPhase == uint8(LotteryPhase.Phase.OPEN)) {
             uint256 tokenCost = totalTicket.mul(gameCost);
             require(lpToken.balanceOf(msg.sender) >= tokenCost);
 
@@ -185,37 +197,39 @@ contract Lottery is Game {
 
             uint256 offset = 0;
             for (uint256 i = 0; i < totalTicket; i++) {
-                uint16[] ticket =
-                    uint16[](
-                        numbers[i + offset],
-                        numbers[i + offset],
-                        numbers[i + offset],
-                        number[i + offset]
+                Ticket storage ticket =
+                    Ticket(
+                        uint16[](
+                            numbers[i + offset],
+                            numbers[i + offset],
+                            numbers[i + offset],
+                            numbers[i + offset]
+                        )
                     );
 
-                _verifyWinnableTicket(ticket, msg.sender);
+                _verifyWinnableTicket(ticket.numbers, msg.sender);
                 offset += 3;
             }
         }
     }
 
-    function _verifyWinnableTicket(uint16[] ticket, address ticketOwner)
+    function _verifyWinnableTicket(Ticket storage ticket, address ticketOwner)
         internal
     {
-        bool[] sameNumber =
+        bool[] memory sameNumber =
             bool[](
-                _sameValueAt(0, ticket),
-                _sameValueAt(1, ticket),
-                _sameValueAt(2, ticket),
-                _sameValueAt(3, ticket)
+                _sameValueAt(0, ticket.numbers),
+                _sameValueAt(1, ticket.numbers),
+                _sameValueAt(2, ticket.numbers),
+                _sameValueAt(3, ticket.numbers)
             );
 
         UserInfo storage userInfo = usersInfo[ticketOwner];
         userInfo.tickets.push(ticket);
 
-        if (ticket == winnableTicket) {
+        if (ticket.numbers == winnableNumber) {
             totalWinnersPerTier[Tiers.TIER1]++;
-            userInfo.ticketTiers[Tier.TIER1]++;
+            userInfo.ticketTiers[Tiers.TIER1]++;
             userInfo.notClaimed = true;
         } else if (
             (sameNumber[0] && sameNumber[1] && sameNumber[2]) ||
@@ -238,7 +252,7 @@ contract Lottery is Game {
     }
 
     function claim() external {
-        if (currentPhase == uint8(Phase.OPEN)) {
+        if (currentPhase == uint8(LotteryPhase.Phase.OPEN)) {
             changePhase();
         }
 
@@ -254,7 +268,7 @@ contract Lottery is Game {
     }
 
     function getTotalWonByUser(address user) external view returns (uint256) {
-        if (currentPhase != uint8(Phase.CLOSING)) {
+        if (currentPhase != uint8(LotteryPhase.Phase.CLOSING)) {
             return 0;
         }
 
@@ -285,7 +299,10 @@ contract Lottery is Game {
 
     function changePhase() public {
         require(nextPhase != 0, "Lottery isn't started");
-        require(currentPhase < uint8(Phase.CLOSING), "Reached the last phase");
+        require(
+            currentPhase < uint8(LotteryPhase.Phase.CLOSING),
+            "Reached the last phase"
+        );
         require(nextPhase <= block.timestamp, "Time is not reached");
 
         nextPhase =
@@ -294,13 +311,13 @@ contract Lottery is Game {
 
         currentPhase++;
 
-        if (currentPhase == uint8(Phase.CLOSING)) {
+        if (currentPhase == uint8(LotteryPhase.Phase.CLOSING)) {
             _end();
         }
     }
 
-    function setCost(uint256 ticketCost) external override isCreator {
-        gameCost = ticketCost;
+    function isDone() external view returns (bool) {
+        return currentPhase == uint8(LotteryPhase.Phase.CLOSING);
     }
 
     function _end() internal {
@@ -309,7 +326,7 @@ contract Lottery is Game {
 
         uint256 tokenLeft = totalToken.sub(_getTotalDistributedTokens());
 
-        lpToken.safeTransfer(casino.treasury, totalTokenTreasury);
+        lpToken.safeTransfer(casino.treasury, sharesPerTierWin[Tiers.LOTTERY]);
 
         if (isOfficial) {
             _prepareNextLottery(tokenLeft);
@@ -369,7 +386,7 @@ contract Lottery is Game {
         lpToken.safeTransfer(newLottery, lpToken.balanceof(address(this)));
     }
 
-    function _sameValueAt(uint8 index, uint16[] numbers)
+    function _sameValueAt(uint8 index, uint16[] memory numbers)
         internal
         view
         returns (bool)

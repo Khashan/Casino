@@ -22,34 +22,33 @@ contract SlotMatchine is Game {
         uint16 _cols,
         uint16 _rows
     ) external {
-        super._init(_casino, _owner, _manager, _cost, _initialTokens);
-        transferOwnership(_owner);
+        super._init(_casino, _owner, _manager, _cost, _initialTokens, true);
         gameCost = _cost;
         cols = _cols;
         rows = _rows;
     }
 
-    function play(address user, uint256 _usedToken) public override {
-        _playVerification(msg.sender, user, _usedToken);
+    function play(uint256 _usedToken) external override returns (bool) {
+        _playVerification(_usedToken);
 
         require(winPossibilities.length > 3, "Not enough win possibilities");
-        casino.takeToken(user, gameCost);
+        casino.takeToken(msg.sender, gameCost);
 
-        uint256[] memory results = casino.getRandomNumber(cols, rows, 0);
+        uint256[] memory results = casino.getRandomNumbers(cols, rows, 0);
         uint256 possLength = winPossibilities.length;
         uint256 winPool = casino.getGameTokens(this);
 
-        for (uint256 i = 0; i < possLength; i++) {
-            WinData storage win = winPossibilities[i];
+        // for (uint256 i = 0; i < possLength; i++) {
+        //     WinData memory win = winPossibilities[i];
 
-            if (win.combo == results) {
-                casino.transferToken(
-                    user,
-                    winPool.mul(win.rewardPercent).div(10000)
-                );
-                return true;
-            }
-        }
+        //     if (win.combo == results) {
+        //         casino.transferToken(
+        //             user,
+        //             winPool.mul(win.rewardPercent).div(10000)
+        //         );
+        //         return true;
+        //     }
+        // }
 
         return false;
     }

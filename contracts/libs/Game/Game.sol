@@ -19,14 +19,6 @@ abstract contract Game is IGame {
     bool public canBeDestroyed;
     ICasino public casino;
 
-    constructor(
-        ICasino _casino,
-        address _owner,
-        address _creator,
-        uint256 _cost,
-        uint256 _initialTokens
-    ) {}
-
     function _init(
         ICasino _casino,
         address _owner,
@@ -34,7 +26,7 @@ abstract contract Game is IGame {
         uint256 _cost,
         uint256 _initialTokens,
         bool _canBeDestroyed
-    ) internal override {
+    ) internal {
         require(!isInitialized, "Contract already initialized");
         casino = _casino;
         owner = _owner;
@@ -52,16 +44,7 @@ abstract contract Game is IGame {
         isInitialized = true;
     }
 
-    function cost() external view override returns (uint256) {
-        return gameCost;
-    }
-
-    function _playVerification(
-        address requester,
-        address user,
-        uint256 _usedToken
-    ) internal {
-        require(requester == address(casino), "Need to use Casino contract");
+    function _playVerification(uint256 _usedToken) internal view {
         require(!isDestroying, "The game will be destroyed");
         require(_usedToken >= gameCost, "Didn't pay");
     }
@@ -84,10 +67,14 @@ abstract contract Game is IGame {
 
     function applyBPS(uint256 amount, uint256 bps)
         internal
-        view
+        pure
         returns (uint256)
     {
         return amount.mul(10000).div(bps);
+    }
+
+    function setCost(uint256 _cost) external override isCreator {
+        gameCost = _cost;
     }
 
     modifier isCreator {

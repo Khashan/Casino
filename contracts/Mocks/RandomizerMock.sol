@@ -27,7 +27,8 @@ contract RandomizerMock is Ownable, IRandomizer, VRFConsumerBase {
     }
 
     function getRandomNumber(uint256 userProvidedSeed)
-        public
+        external
+        override
         onlyOwner
         returns (bytes32 requestId)
     {
@@ -66,15 +67,15 @@ contract RandomizerMock is Ownable, IRandomizer, VRFConsumerBase {
     function expand(
         uint256 randomValue,
         uint256 n,
-        uint256 max,
+        uint256 mod,
         uint256 offset
     ) internal pure returns (uint256[] memory expandedValues) {
         expandedValues = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
             expandedValues[i] = uint256(keccak256(abi.encode(randomValue, i)));
 
-            if (max > 0) {
-                expandedValues[i] = expandedValues[i].mod(max).add(offset);
+            if (mod > 0) {
+                expandedValues[i] = (expandedValues[i] % mod) + offset;
             }
         }
         return expandedValues;
