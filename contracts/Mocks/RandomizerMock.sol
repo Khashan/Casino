@@ -1,14 +1,19 @@
-pragma solidity ^0.8.4;
+pragma solidity ^0.6.5;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "openzeppelin-old/access/Ownable.sol";
+import "openzeppelin-old/math/SafeMath.sol";
+import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
 
 import "../libs/IRandomizer.sol";
 
-contract Randomizer is Ownable, IRandomizer {
+contract RandomizerMock is Ownable, IRandomizer, VRFConsumerBase {
     using SafeMath for uint256;
 
+    bytes32 internal keyHash;
+    uint256 internal fee;
     mapping(bytes32 => uint256) generatedRandoms;
+
+    uint256 request = 0;
 
     constructor()
         public
@@ -26,11 +31,12 @@ contract Randomizer is Ownable, IRandomizer {
         onlyOwner
         returns (bytes32 requestId)
     {
-        requestId = keccak256(abi.encodePacked(keyHash, block.timestamp));
+        request++;
+        requestId = keccak256(abi.encodePacked(request));
 
         fulfillRandomness(
             requestId,
-            uint256(keccak256(block.timestamp, block.difficulty))
+            uint256(keccak256(abi.encode(block.timestamp, block.difficulty)))
         );
 
         return requestId;
@@ -60,15 +66,15 @@ contract Randomizer is Ownable, IRandomizer {
     function expand(
         uint256 randomValue,
         uint256 n,
-        uint256 mod,
+        uint256 max,
         uint256 offset
     ) internal pure returns (uint256[] memory expandedValues) {
         expandedValues = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
             expandedValues[i] = uint256(keccak256(abi.encode(randomValue, i)));
 
-            if (mod > 0) {
-                expandedValues[i] = expandedValues[i].mod(mod).add(offset);
+            if (max > 0) {
+                expandedValues[i] = expandedValues[i].mod(max).add(offset);
             }
         }
         return expandedValues;

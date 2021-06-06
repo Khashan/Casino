@@ -1,8 +1,6 @@
-pragma solidity ^0.8.4;
+pragma solidity >=0.6.0;
 
-import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
-
-interface IRandomizer is VRFConsumerBase {
+interface IRandomizer {
     function fetchRandom(
         bytes32 requestId,
         uint256 quantity,

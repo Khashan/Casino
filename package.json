@@ -19,6 +19,7 @@
   "dependencies": {
     "@chainlink/contracts": "^0.1.7",
     "@openzeppelin/contracts": "^4.1.0",
-    "@openzeppelin/test-helpers": "^0.5.11"
+    "@openzeppelin/test-helpers": "^0.5.11",
+    "openzeppelin-old": "npm:@openzeppelin/contracts@^3.1.0"
   }
 }

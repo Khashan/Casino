@@ -1,11 +1,12 @@
-pragma solidity ^0.8.4;
+pragma solidity ^0.6.5;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "openzeppelin-old/access/Ownable.sol";
+import "openzeppelin-old/math/SafeMath.sol";
+import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
 
 import "./libs/IRandomizer.sol";
 
-contract RandomizerMock is Ownable, IRandomizer {
+contract RandomizerMock is Ownable, IRandomizer, VRFConsumerBase {
     using SafeMath for uint256;
 
     bytes32 internal keyHash;
