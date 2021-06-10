@@ -6,7 +6,7 @@ import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
 
 import "../libs/IRandomizer.sol";
 
-contract RandomizerMock is Ownable, IRandomizer, VRFConsumerBase {
+contract RandomizerMockCasino is Ownable, IRandomizer, VRFConsumerBase {
     using SafeMath for uint256;
 
     bytes32 internal keyHash;

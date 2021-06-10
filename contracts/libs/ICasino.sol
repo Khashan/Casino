@@ -25,6 +25,8 @@ interface ICasino {
 
     function setRandomizer(IRandomizer _randomizer) external;
 
+    function getTreasury() external view returns (address);
+
     function getRandomNumbers(
         uint256 _quantity,
         uint256 _mod,

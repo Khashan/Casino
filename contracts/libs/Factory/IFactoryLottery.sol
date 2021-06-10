@@ -12,7 +12,7 @@ interface IFactoryLottery {
         uint256 _gameCost,
         uint256 _initPool,
         uint256 _maxTicketPerUser
-    ) external;
+    ) external returns (Lottery);
 
     function setCreationCost(uint256 cost) external;
 

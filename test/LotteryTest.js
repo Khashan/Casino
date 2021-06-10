@@ -1,7 +1,6 @@
 const { expectRevert, time } = require('@openzeppelin/test-helpers');
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const ERC20Mock = artifacts.require('ERC20Mock');
 //await time.advanceBlockTo('170');
 
 describe("Lottery", function () {
@@ -9,17 +8,19 @@ describe("Lottery", function () {
     before(async function () {
         [this.owner, this.creator, this.user] = await ethers.getSigners();
 
-        this.token = await ERC20Mock.new("Token", "TT", this.owner, 0);
-        this.fakeT = await ERC20Mock.new("FToken", "FT", this.owner, 0);
-        this.usdt = await ERC20Mock.new("Currency", "USDT", this.owner, 0);
+        const ERC20Mock = await ethers.getContractFactory("ERC20Mock");
 
-        const Random = await ethers.getContractFactory("RandomizerMock");
+        this.token = await ERC20Mock.deploy("Token", "TT", this.owner.address, 100);
+        this.fakeT = await ERC20Mock.deploy("FToken", "FT", this.owner.address, 100);
+        this.usdt = await ERC20Mock.deploy("Currency", "USDT", this.owner.address, 100);
+
+        const Random = await ethers.getContractFactory("RandomizerMockCasino");
         const random = await Random.deploy();
 
         const Casino = await ethers.getContractFactory("Casino");
-        this.casino = await Casino.deploy(this.usdt, random);
+        this.casino = await Casino.deploy(this.usdt.address, random.address);
 
-        random.transferOwnership(this.casino);
+        random.transferOwnership(this.casino.address);
 
         const Lottery = await ethers.getContractFactory("Lottery");
         const lottery = await Lottery.deploy();
@@ -31,41 +32,47 @@ describe("Lottery", function () {
         this.database = await Database.deploy();
 
         const Factory = await ethers.getContractFactory("FactoryLottery");
-        this.factory = await Factory.deploy(this.casino, lottery, lotteryPhase, this.database, 100);
+        this.factory = await Factory.deploy(this.casino.address, lottery.address, lotteryPhase.address, this.database.address, 100);
 
 
-        await this.token.mint(this.creator, 100);
-        await this.fakeT.mint(this.creator, 100);
-        await this.usdt.mint(this.creator, 100);
+        await this.token.mint(this.creator.address, 100);
+        await this.fakeT.mint(this.creator.address, 100);
+        await this.usdt.mint(this.creator.address, 100);
 
-        await this.token.mint(this.user, 100);
-        await this.fakeT.mint(this.user, 100);
-        await this.usdt.mint(this.user, 100);
+        await this.token.mint(this.user.address, 100);
+        await this.fakeT.mint(this.user.address, 100);
+        await this.usdt.mint(this.user.address, 100);
+    });
+
+    describe("General", function () {
+        it("Creating Lottery with not enough initial pool", async function () {
+            await expectRevert.unspecified(this.factory.createLottery(this.token.address, 0, 0, 0, { from: this.owner.address }));
+            await expectRevert.unspecified(this.factory.createLottery(this.token.address, 0, 0, 0, { from: this.user.token }));
+
+            await expectRevert.unspecified(this.factory.createLottery(this.token.address, 0, 1000, 0, { from: this.owner.address }));
+            await expectRevert.unspecified(this.factory.createLottery(this.token.address, 0, 1000, 0, { from: this.user.token }));
+        });
     });
 
     describe("Official", function () {
 
-        it("Creating Lottery with not enough initial pool", async function () {
-            await expectRevert(this.factory.createLottery(this.token, 100, 0, 0));
-        });
+        var official_lottery;
+
+
+        it("Create Official", async function () {
+            this.token.allowance(this.factory)
+            official_lottery = await this.factory.createLottery(this.token.address, 10, 50, 0, { from: this.owner.address });
+
+            expect(official_lottery.address).to.notEqual(0x0);
+            expect(official_lottery.owner).to.equal(this.owner);
+            expect(official_lottery.creator).to.equal(this.owner);
+            expect(official_lottery.isOfficial).to.equal(true);
+        })
     });
 
     describe("Community", function () {
 
         it("Creating Lottery", async function () {
-            const [owner, addr1, addr2] = await ethers.getSigners();
-
-            const Lottery = await ethers.getContractFactory("Lottery");
-
-            const hardhatToken = await Token.deploy();
-
-            // Transfer 50 tokens from owner to addr1
-            await hardhatToken.transfer(addr1.address, 50);
-            expect(await hardhatToken.balanceOf(addr1.address)).to.equal(50);
-
-            // Transfer 50 tokens from addr1 to addr2
-            await hardhatToken.connect(addr1).transfer(addr2.address, 50);
-            expect(await hardhatToken.balanceOf(addr2.address)).to.equal(50);
         });
     });
 })

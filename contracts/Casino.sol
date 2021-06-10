@@ -16,7 +16,7 @@ contract Casino is Ownable, ICasino {
     mapping(IGame => bool) public games;
 
     address private casinoBank;
-    address public treasury;
+    address private treasury;
     IRandomizer private randomizer;
 
     event BuyToken(address indexed user, uint256 amount);
@@ -139,6 +139,10 @@ contract Casino is Ownable, ICasino {
         emit Migrate(casino);
     }
 
+    function getTreasury() external view override returns (address) {
+        return treasury;
+    }
+
     function setRandomizer(IRandomizer _randomizer)
         external
         override
@@ -151,7 +155,7 @@ contract Casino is Ownable, ICasino {
         uint256 _quantity,
         uint256 _mod,
         uint256 _offset
-    ) external override onlyGame returns (uint256[] memory expandedValues) {
+    ) external override onlyGame returns (uint256[] memory) {
         require(_quantity > 0, "Qty needs to be at least 1");
 
         bytes32 request =

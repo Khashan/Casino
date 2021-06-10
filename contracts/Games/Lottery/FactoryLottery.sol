@@ -10,7 +10,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     Lottery[] lotteries;
     LotteryPhase public lotteryPhase;
     ICasino public casino;
-    uint256 treasuryBPSCommunity = 500;
+    uint256 public treasuryBPSCommunity = 500;
 
     mapping(address => uint256) indexLotteries;
 
@@ -37,13 +37,14 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         uint256 _gameCost,
         uint256 _initPool,
         uint256 _maxTicketPerUser
-    ) external override {
+    ) external override returns (Lottery lottery) {
         require(
             _lpToken.balanceOf(msg.sender) >= _initPool,
             "Not enough for the initial pool"
         );
 
-        Lottery lottery = Lottery(Clones.clone(masterLottery));
+        lottery = Lottery(Clones.clone(masterLottery));
+        _lpToken.approve(address(lottery), _initPool);
         lottery.init(
             this,
             owner(),
@@ -55,6 +56,8 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         );
 
         indexLottery(lottery);
+
+        return lottery;
     }
 
     function createNextLottery(Lottery oldLottery)
