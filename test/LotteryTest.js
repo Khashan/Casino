@@ -34,6 +34,7 @@ describe("Lottery", function () {
         const Factory = await ethers.getContractFactory("FactoryLottery");
         this.factory = await Factory.deploy(this.casino.address, lottery.address, lotteryPhase.address, this.database.address, 100);
 
+        this.casino.setFactory(this.factory.address, true, { from: this.owner.address });
 
         await this.token.mint(this.creator.address, 100);
         await this.fakeT.mint(this.creator.address, 100);
@@ -56,17 +57,20 @@ describe("Lottery", function () {
 
     describe("Official", function () {
 
-        var official_lottery;
+        const INIT_POOL = 50;
+        const TICKET_COST = 10;
 
 
         it("Create Official", async function () {
-            this.token.allowance(this.factory)
-            official_lottery = await this.factory.createLottery(this.token.address, 10, 50, 0, { from: this.owner.address });
+            this.token.approve(this.factory.address, INIT_POOL, { from: this.owner.address });
+            this.official_lottery = await this.factory.createLottery(this.token.address, TICKET_COST, INIT_POOL, 0, { from: this.owner.address });
 
-            expect(official_lottery.address).to.notEqual(0x0);
-            expect(official_lottery.owner).to.equal(this.owner);
-            expect(official_lottery.creator).to.equal(this.owner);
-            expect(official_lottery.isOfficial).to.equal(true);
+            //expect(await official_lottery.owner).to.equal(this.owner.address);
+            //expect(await official_lottery.creator).to.equal(this.owner.address);
+
+            //expect(await official_lottery.isOfficial).to.equal(true);
+            console.log(this.official_lottery.address)
+            expect(await this.token.balanceOf(this.official_lottery.address)).to.equal(INIT_POOL);
         })
     });
 

@@ -5,6 +5,8 @@ import "./IRandomizer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICasino {
+    function setFactory(address _factory, bool _active) external;
+
     function setGame(IGame _game, bool _status) external;
 
     function buyToken(uint256 _amount) external;

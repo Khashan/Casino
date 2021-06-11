@@ -7,6 +7,8 @@ import "./LotteryPhase.sol";
 import "../../Databases/DatabaseLottery.sol";
 
 contract FactoryLottery is IFactoryLottery, Ownable {
+    using SafeERC20 for IERC20;
+
     Lottery[] lotteries;
     LotteryPhase public lotteryPhase;
     ICasino public casino;
@@ -43,16 +45,21 @@ contract FactoryLottery is IFactoryLottery, Ownable {
             "Not enough for the initial pool"
         );
 
+        require(_initPool != 0, "Initial Pool cannot be 0");
+
         lottery = Lottery(Clones.clone(masterLottery));
-        _lpToken.approve(address(lottery), _initPool);
+        _lpToken.safeTransferFrom(msg.sender, address(this), _initPool);
+        _lpToken.transfer(address(lottery), _initPool);
+
+        casino.setGame(lottery, true);
+
         lottery.init(
             this,
             owner(),
             msg.sender,
             _lpToken,
             _maxTicketPerUser,
-            _gameCost,
-            _initPool
+            _gameCost
         );
 
         indexLottery(lottery);
@@ -104,6 +111,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         lotteries.pop();
 
         indexLotteries[msg.sender] = 0;
+        casino.setGame(Lottery(msg.sender), false);
 
         database.addLottery(Lottery(msg.sender));
     }

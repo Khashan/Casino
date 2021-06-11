@@ -14,6 +14,7 @@ contract Casino is Ownable, ICasino {
     mapping(address => uint256) public userWallets;
     mapping(IGame => uint256) public gameWallets;
     mapping(IGame => bool) public games;
+    mapping(address => bool) factories;
 
     address private casinoBank;
     address private treasury;
@@ -50,12 +51,29 @@ contract Casino is Ownable, ICasino {
         _;
     }
 
+    modifier onlyFactories {
+        require(factories[msg.sender] || msg.sender == owner(), "Not factory");
+        _;
+    }
+
     modifier onlyGame {
         require(games[IGame(msg.sender)], "Not game");
         _;
     }
 
-    function setGame(IGame _game, bool _status) external override onlyOwner {
+    function setFactory(address _address, bool _active)
+        external
+        override
+        onlyOwner
+    {
+        factories[_address] = _active;
+    }
+
+    function setGame(IGame _game, bool _status)
+        external
+        override
+        onlyFactories
+    {
         games[_game] = _status;
     }
 

@@ -68,8 +68,7 @@ contract Lottery is Game {
         address _creator,
         IERC20 _lpToken,
         uint256 _maxTicketPerUser,
-        uint256 _gameCost,
-        uint256 _initPool
+        uint256 _gameCost
     ) public {
         super._init(
             _factory.casino(),
@@ -79,13 +78,6 @@ contract Lottery is Game {
             _factory.creationCost(),
             false
         );
-        require(
-            _lpToken.balanceOf(_creator) >= _initPool,
-            "Not enough for the initial pool"
-        );
-        require(_initPool != 0, "Initial Pool cannot be 0");
-
-        _lpToken.safeTransferFrom(_creator, address(this), _initPool);
 
         _initLottery(_factory, _lpToken, _maxTicketPerUser);
     }
