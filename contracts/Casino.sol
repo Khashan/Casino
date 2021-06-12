@@ -9,7 +9,7 @@ contract Casino is Ownable, ICasino {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint256 public tokenCost = 1 ether;
+    uint256 public tokenCost = 1;
     IERC20 public currencyToken;
     mapping(address => uint256) public userWallets;
     mapping(IGame => uint256) public gameWallets;
@@ -30,10 +30,15 @@ contract Casino is Ownable, ICasino {
     event Migrate(ICasino indexed to);
     event Win(address indexed user, address indexed game, uint256 amount);
 
-    constructor(IERC20 _currencyToken, IRandomizer _random) {
+    constructor(
+        IERC20 _currencyToken,
+        IRandomizer _random,
+        address _treasury
+    ) {
         currencyToken = _currencyToken;
         casinoBank = address(this);
         randomizer = _random;
+        treasury = _treasury;
     }
 
     modifier hasCurrency(uint256 _amount) {

@@ -19,7 +19,7 @@ contract Lottery is Game {
         uint256 tier1;
         uint256 tier2;
         uint256 tier3;
-        uint256 owner;
+        uint256 creator;
         uint256 treasury;
         uint256 fee;
         uint256 totalAssigned;
@@ -37,7 +37,7 @@ contract Lottery is Game {
     uint8 public currentPhase;
     RewardsDistribution public rewardsDistribution;
 
-    uint16[4] private winnableNumber;
+    uint16[4] public winnableNumber;
     mapping(Tiers => uint256) private totalWinnersPerTier;
     mapping(Tiers => uint256) private sharesPerTierWin;
     mapping(address => UserInfo) private usersInfo;
@@ -95,6 +95,7 @@ contract Lottery is Game {
 
         currentPhase = uint8(LotteryPhase.Phase.INIT);
         uint256[] memory randoms = casino.getRandomNumbers(4, 16, 1);
+
         winnableNumber[0] = uint16(randoms[0]);
         winnableNumber[1] = uint16(randoms[1]);
         winnableNumber[2] = uint16(randoms[2]);
@@ -106,19 +107,19 @@ contract Lottery is Game {
     function _initDefaultDistribution() internal {
         if (isOfficial) {
             rewardsDistribution = RewardsDistribution(
-                400,
-                250,
-                150,
+                4000,
+                2500,
+                1500,
                 0,
-                100,
-                50,
-                (450 + 250 + 150 + 100 + 50)
+                1000,
+                500,
+                (4500 + 2500 + 1500 + 1000 + 500)
             );
             nextPhase =
                 block.timestamp +
                 lotteryPhase.getPhaseTimer(currentPhase);
         } else {
-            rewardsDistribution = RewardsDistribution(0, 0, 0, 0, 50, 0, 50);
+            rewardsDistribution = RewardsDistribution(0, 0, 0, 0, 500, 0, 500);
         }
     }
 
@@ -144,7 +145,7 @@ contract Lottery is Game {
         uint256 _tier1,
         uint256 _tier2,
         uint256 _tier3,
-        uint256 _owner
+        uint256 _creator
     ) external isCreator {
         require(
             !isOfficial,
@@ -152,7 +153,11 @@ contract Lottery is Game {
         );
 
         uint256 total =
-            _tier1 + _tier2 + _tier3 + _owner + factory.treasuryBPSCommunity();
+            _tier1 +
+                _tier2 +
+                _tier3 +
+                _creator +
+                factory.treasuryBPSCommunity();
 
         require(total == 10000, "Distribution is not valid");
 
@@ -160,7 +165,7 @@ contract Lottery is Game {
             _tier1,
             _tier2,
             _tier3,
-            _owner,
+            _creator,
             factory.treasuryBPSCommunity(),
             0,
             total
@@ -168,10 +173,16 @@ contract Lottery is Game {
     }
 
     function isValidDistribution() public view returns (bool) {
-        return rewardsDistribution.totalAssigned == 1000;
+        return rewardsDistribution.totalAssigned == 10000;
     }
 
-    function play(uint256 totalTicket) external override returns (bool) {
+    function play(uint256 totalTicket) external override {
+        require(totalTicket <= 10, "Too many tickets in one go.");
+        require(
+            currentPhase != uint8(LotteryPhase.Phase.INIT),
+            "Lottery is not done initializing"
+        );
+
         UserInfo storage userInfo = usersInfo[msg.sender];
 
         if (maxTicketPerUser != 0) {
@@ -185,28 +196,36 @@ contract Lottery is Game {
             changePhase();
         }
 
-        if (currentPhase == uint8(LotteryPhase.Phase.OPEN)) {
-            uint256 tokenCost = totalTicket.mul(gameCost);
-            require(lpToken.balanceOf(msg.sender) >= tokenCost);
+        require(
+            currentPhase == uint8(LotteryPhase.Phase.OPEN) &&
+                nextPhase > block.timestamp,
+            "Lottery is closed"
+        );
 
-            uint256[] memory numbers =
-                casino.getRandomNumbers(4 * totalTicket, 16, 1);
+        uint256 tokenCost = totalTicket.mul(gameCost);
+        require(
+            lpToken.balanceOf(msg.sender) >= tokenCost,
+            "Not enough lpToken"
+        );
+        lpToken.safeTransferFrom(msg.sender, address(this), tokenCost);
 
-            uint256 offset = 0;
-            for (uint256 i = 0; i < totalTicket; i++) {
-                Ticket memory ticket =
-                    Ticket(
-                        [
-                            uint16(numbers[i + offset]),
-                            uint16(numbers[i + offset]),
-                            uint16(numbers[i + offset]),
-                            uint16(numbers[i + offset])
-                        ]
-                    );
+        uint256[] memory numbers =
+            casino.getRandomNumbers(4 * totalTicket, 16, 1);
 
-                _verifyWinnableTicket(ticket, msg.sender);
-                offset += 3;
-            }
+        uint256 offset = 0;
+        for (uint256 i = 0; i < totalTicket; i++) {
+            Ticket memory ticket =
+                Ticket(
+                    [
+                        uint16(numbers[i + offset]),
+                        uint16(numbers[i + 1 + offset]),
+                        uint16(numbers[i + 2 + offset]),
+                        uint16(numbers[i + 3 + offset])
+                    ]
+                );
+
+            _verifyWinnableTicket(ticket, msg.sender);
+            offset += 3;
         }
     }
 
@@ -264,7 +283,7 @@ contract Lottery is Game {
         UserInfo storage userInfo = usersInfo[user];
 
         return
-            (!isDone() && nextPhase <= block.timestamp)
+            (!isDone())
                 ? _estimateTokenWonByUser(userInfo)
                 : _getTotalWonByUser(userInfo);
     }
@@ -281,9 +300,10 @@ contract Lottery is Game {
         (uint256 tier1, uint256 tier2, uint256 tier3, uint256 treasury) =
             _getDistributionRewards();
 
-        rewards.add(tier1.div(userInfo.ticketTiers[Tiers.TIER1]));
-        rewards.add(tier2.div(userInfo.ticketTiers[Tiers.TIER2]));
-        rewards.add(tier3.div(userInfo.ticketTiers[Tiers.TIER3]));
+        rewards = tier1
+            .mul(userInfo.ticketTiers[Tiers.TIER1])
+            .add(tier2.mul(userInfo.ticketTiers[Tiers.TIER2]))
+            .add(tier3.mul(userInfo.ticketTiers[Tiers.TIER3]));
 
         return rewards;
     }
@@ -294,17 +314,18 @@ contract Lottery is Game {
         returns (uint256)
     {
         uint256 totalTokenWon =
-            sharesPerTierWin[Tiers.TIER1].mul(
-                userInfo.ticketTiers[Tiers.TIER1]
+            sharesPerTierWin[Tiers.TIER1]
+                .mul(userInfo.ticketTiers[Tiers.TIER1])
+                .add(
+                sharesPerTierWin[Tiers.TIER2].mul(
+                    userInfo.ticketTiers[Tiers.TIER2]
+                )
+            )
+                .add(
+                sharesPerTierWin[Tiers.TIER3].mul(
+                    userInfo.ticketTiers[Tiers.TIER3]
+                )
             );
-
-        totalTokenWon.add(
-            sharesPerTierWin[Tiers.TIER2].mul(userInfo.ticketTiers[Tiers.TIER2])
-        );
-
-        totalTokenWon.add(
-            sharesPerTierWin[Tiers.TIER3].mul(userInfo.ticketTiers[Tiers.TIER3])
-        );
 
         return totalTokenWon;
     }
@@ -373,19 +394,25 @@ contract Lottery is Game {
     {
         uint256 totalToken = lpToken.balanceOf(address(this));
 
+        uint256 totalWinnerTier1 = totalWinnersPerTier[Tiers.TIER1];
+        uint256 totalWinnerTier2 = totalWinnersPerTier[Tiers.TIER2];
+        uint256 totalWinnerTier3 = totalWinnersPerTier[Tiers.TIER3];
+
         tier1 = applyBPS(totalToken, rewardsDistribution.tier1).div(
-            totalWinnersPerTier[Tiers.TIER1]
+            totalWinnerTier1 != 0 ? totalWinnerTier1 : 1
         );
 
         tier2 = applyBPS(totalToken, rewardsDistribution.tier2).div(
-            totalWinnersPerTier[Tiers.TIER2]
+            totalWinnerTier2 != 0 ? totalWinnerTier2 : 1
         );
 
         tier3 = applyBPS(totalToken, rewardsDistribution.tier3).div(
-            totalWinnersPerTier[Tiers.TIER3]
+            totalWinnerTier3 != 0 ? totalWinnerTier3 : 1
         );
 
         treasury = applyBPS(totalToken, rewardsDistribution.treasury);
+
+        return (tier1, tier2, tier3, treasury);
     }
 
     function _getTotalDistributedTokens() internal view returns (uint256) {

@@ -70,7 +70,7 @@ abstract contract Game is IGame {
         pure
         returns (uint256)
     {
-        return amount.mul(10000).div(bps);
+        return amount.mul(bps).div(10000);
     }
 
     function setCost(uint256 _cost) external override isCreator {

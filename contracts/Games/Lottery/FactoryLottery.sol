@@ -9,16 +9,19 @@ import "../../Databases/DatabaseLottery.sol";
 contract FactoryLottery is IFactoryLottery, Ownable {
     using SafeERC20 for IERC20;
 
-    Lottery[] lotteries;
+    Lottery[] public lotteries;
     LotteryPhase public lotteryPhase;
     ICasino public casino;
     uint256 public treasuryBPSCommunity = 500;
 
-    mapping(address => uint256) indexLotteries;
+    mapping(address => uint256) private indexLotteries;
+    mapping(address => Lottery[]) private creatorLotteries;
 
     uint256 public creationCost;
     address masterLottery;
     DatabaseLottery database;
+
+    event LotteryCreate(address indexed factory, address indexed creator);
 
     constructor(
         ICasino _casino,
@@ -39,7 +42,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         uint256 _gameCost,
         uint256 _initPool,
         uint256 _maxTicketPerUser
-    ) external override returns (Lottery lottery) {
+    ) external override {
         require(
             _lpToken.balanceOf(msg.sender) >= _initPool,
             "Not enough for the initial pool"
@@ -47,7 +50,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
 
         require(_initPool != 0, "Initial Pool cannot be 0");
 
-        lottery = Lottery(Clones.clone(masterLottery));
+        Lottery lottery = Lottery(Clones.clone(masterLottery));
         _lpToken.safeTransferFrom(msg.sender, address(this), _initPool);
         _lpToken.transfer(address(lottery), _initPool);
 
@@ -64,7 +67,8 @@ contract FactoryLottery is IFactoryLottery, Ownable {
 
         indexLottery(lottery);
 
-        return lottery;
+        creatorLotteries[msg.sender].push(lottery);
+        emit LotteryCreate(address(lottery), msg.sender);
     }
 
     function createNextLottery(Lottery oldLottery)
@@ -74,6 +78,8 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     {
         require(_isLottery(address(oldLottery)), "Only lottery can call this");
         Lottery lottery = Lottery(Clones.clone(masterLottery));
+        casino.setGame(lottery, true);
+
         lottery.clone(oldLottery);
         indexLottery(lottery);
 
@@ -114,5 +120,14 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         casino.setGame(Lottery(msg.sender), false);
 
         database.addLottery(Lottery(msg.sender));
+    }
+
+    function getCreatorLotteries(address creator)
+        external
+        view
+        override
+        returns (Lottery[] memory)
+    {
+        return creatorLotteries[creator];
     }
 }

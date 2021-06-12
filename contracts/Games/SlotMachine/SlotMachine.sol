@@ -28,7 +28,7 @@ contract SlotMatchine is Game {
         rows = _rows;
     }
 
-    function play(uint256 _usedToken) external override returns (bool) {
+    function play(uint256 _usedToken) external override {
         _playVerification(_usedToken);
 
         require(winPossibilities.length > 3, "Not enough win possibilities");
@@ -49,8 +49,6 @@ contract SlotMatchine is Game {
         //         return true;
         //     }
         // }
-
-        return false;
     }
 
     function addWinPosibility(uint16[] memory _combo, uint256 _rewardPercent)
