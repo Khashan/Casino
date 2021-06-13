@@ -135,7 +135,6 @@ describe("Lottery", function () {
             let user1Reward = (await official_lottery.getTotalWonByUser(this.user.address)).toNumber();
             let user2Reward = (await official_lottery.getTotalWonByUser(this.user2.address)).toNumber();
 
-            console.log("User 1");
             if (user1Reward == 0) {
                 await expectRevert.unspecified(official_lottery.connect(this.user).claim());
             }
@@ -145,7 +144,6 @@ describe("Lottery", function () {
                 expect(await this.token.balanceOf(this.user.address)).is.equal(userToken.add(user1Reward));
             }
 
-            console.log("User 2");
             if (user2Reward == 0) {
                 await expectRevert.unspecified(official_lottery.connect(this.user2).claim());
             }
@@ -168,7 +166,6 @@ describe("Lottery", function () {
 
             expect(nextLottery.address).is.not.equal(official_lottery.address);
             expect(await nextLottery.currentPhase()).to.equal(0);
-            console.log("Lottery: " + (await this.token.balanceOf(nextLottery.address)).toNumber());
             expect(await this.token.balanceOf(nextLottery.address)).to.not.equal(0);
             expect(await nextLottery.owner()).to.equal(this.owner.address);
             expect(await nextLottery.creator()).to.equal(this.owner.address);
@@ -273,13 +270,16 @@ describe("Lottery", function () {
             })
 
             it("Close", async function () {
-                await community_unlimited.changePhase();
+                //await community_unlimited.changePhase();
+
                 await community_limited.changePhase();
+                console.log(await community_limited.currentPhase(), "ffwfw");
+                console.log(await community_unlimited.currentPhase(), "ddd");
 
                 await expectRevert.unspecified(this.factory.lotteries(2));
 
-                expect((await this.factory.getCreatorLotteries(this.user)).length).is.equal(1);
-                expect((await this.factory.getCreatorLotteries(this.user2)).length).is.equal(1);
+                expect((await this.factory.getCreatorLotteries(this.user.address)).length).is.equal(1);
+                expect((await this.factory.getCreatorLotteries(this.user2.address)).length).is.equal(1);
             })
         });
     })

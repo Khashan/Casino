@@ -2,6 +2,7 @@ pragma solidity ^0.8.4;
 
 import "../../libs/Game/Game.sol";
 import "./FactoryLottery.sol";
+import "hardhat/console.sol";
 
 contract Lottery is Game {
     using SafeMath for uint256;
@@ -354,6 +355,8 @@ contract Lottery is Game {
     }
 
     function _end() internal {
+        console.log("end");
+
         uint256 totalToken = lpToken.balanceOf(address(this));
         _distributeRewards();
 

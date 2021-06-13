@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./LotteryPhase.sol";
 import "../../Databases/DatabaseLottery.sol";
 
+import "hardhat/console.sol";
+
 contract FactoryLottery is IFactoryLottery, Ownable {
     using SafeERC20 for IERC20;
 
@@ -14,7 +16,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     ICasino public casino;
     uint256 public treasuryBPSCommunity = 500;
 
-    mapping(address => uint256) private indexLotteries;
+    mapping(address => bool) private validLotteries;
     mapping(address => Lottery[]) private creatorLotteries;
 
     uint256 public creationCost;
@@ -22,6 +24,11 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     DatabaseLottery database;
 
     event LotteryCreate(address indexed factory, address indexed creator);
+
+    modifier isLottery(address target) {
+        require(validLotteries[target], "Not a lottery");
+        _;
+    }
 
     constructor(
         ICasino _casino,
@@ -51,8 +58,9 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         require(_initPool != 0, "Initial Pool cannot be 0");
 
         Lottery lottery = Lottery(Clones.clone(masterLottery));
+        address lotteryAddr = address(lottery);
         _lpToken.safeTransferFrom(msg.sender, address(this), _initPool);
-        _lpToken.transfer(address(lottery), _initPool);
+        _lpToken.transfer(lotteryAddr, _initPool);
 
         casino.setGame(lottery, true);
 
@@ -65,60 +73,40 @@ contract FactoryLottery is IFactoryLottery, Ownable {
             _gameCost
         );
 
-        indexLottery(lottery);
-
         creatorLotteries[msg.sender].push(lottery);
-        emit LotteryCreate(address(lottery), msg.sender);
+        validLotteries[lotteryAddr] = true;
+        emit LotteryCreate(lotteryAddr, msg.sender);
     }
 
     function createNextLottery(Lottery oldLottery)
         external
         override
+        isLottery(address(oldLottery))
         returns (address)
     {
-        require(_isLottery(address(oldLottery)), "Only lottery can call this");
         Lottery lottery = Lottery(Clones.clone(masterLottery));
         casino.setGame(lottery, true);
 
         lottery.clone(oldLottery);
-        indexLottery(lottery);
-
         return address(lottery);
-    }
-
-    function indexLottery(Lottery lottery) internal {
-        lotteries.push(lottery);
-        indexLotteries[address(lottery)] = lotteries.length - 1;
     }
 
     function setCreationCost(uint256 cost) external override {
         creationCost = cost;
     }
 
-    function _isLottery(address lotteryAddress) internal view returns (bool) {
-        uint256 index = indexLotteries[lotteryAddress];
-        return lotteryAddress == address(lotteries[index]);
-    }
-
-    function getLotteryIndex(address lotteryAddress)
-        internal
-        view
-        returns (uint256)
-    {
-        return indexLotteries[lotteryAddress];
-    }
-
-    function closeLottery() external {
-        require(_isLottery(msg.sender), "Only Lottery can call this function");
-
-        uint256 index = getLotteryIndex(msg.sender);
-        uint256 length = lotteries.length - 1;
-        lotteries[index] = lotteries[length];
-        lotteries.pop();
-
-        indexLotteries[msg.sender] = 0;
+    function closeLottery() external isLottery(msg.sender) {
+        //Disable from casino
         casino.setGame(Lottery(msg.sender), false);
 
+        //Delete validator data
+        delete validLotteries[msg.sender];
+
+        //Delete from active lotteries
+        lotteries[0] = lotteries[lotteries.length - 1];
+        lotteries.pop();
+
+        //Add to db
         database.addLottery(Lottery(msg.sender));
     }
 
