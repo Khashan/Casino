@@ -9,6 +9,8 @@ interface ICasino {
 
     function setGame(IGame _game, bool _status) external;
 
+    function isGame(IGame _game) external view returns (bool);
+
     function buyToken(uint256 _amount) external;
 
     function sellToken(uint256 _amount) external;

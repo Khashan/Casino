@@ -4,9 +4,6 @@ import "../../libs/Factory/IFactoryLottery.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 
 import "./LotteryPhase.sol";
-import "../../Databases/DatabaseLottery.sol";
-
-import "hardhat/console.sol";
 
 contract FactoryLottery is IFactoryLottery, Ownable {
     using SafeERC20 for IERC20;
@@ -16,31 +13,23 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     ICasino public casino;
     uint256 public treasuryBPSCommunity = 500;
 
-    mapping(address => bool) private validLotteries;
-    mapping(address => Lottery[]) private creatorLotteries;
-
     uint256 public creationCost;
     address masterLottery;
-    DatabaseLottery database;
+    IDatabaseGame databaseGame;
 
     event LotteryCreate(address indexed factory, address indexed creator);
-
-    modifier isLottery(address target) {
-        require(validLotteries[target], "Not a lottery");
-        _;
-    }
 
     constructor(
         ICasino _casino,
         address _masterLottery,
         LotteryPhase _lotteryPhase,
-        DatabaseLottery _database,
+        IDatabaseGame _databaseGame,
         uint256 _creationCost
     ) {
         creationCost = _creationCost;
         masterLottery = _masterLottery;
         lotteryPhase = _lotteryPhase;
-        database = _database;
+        databaseGame = _databaseGame;
         casino = _casino;
     }
 
@@ -72,18 +61,16 @@ contract FactoryLottery is IFactoryLottery, Ownable {
             _maxTicketPerUser,
             _gameCost
         );
-
-        creatorLotteries[msg.sender].push(lottery);
-        validLotteries[lotteryAddr] = true;
-        emit LotteryCreate(lotteryAddr, msg.sender);
     }
 
     function createNextLottery(Lottery oldLottery)
         external
         override
-        isLottery(address(oldLottery))
         returns (address)
     {
+        (uint256 index, bool found) = getLotteryIndex(oldLottery);
+        require(found, "Invalid lottery");
+
         Lottery lottery = Lottery(Clones.clone(masterLottery));
         casino.setGame(lottery, true);
 
@@ -91,31 +78,57 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         return address(lottery);
     }
 
+    function _onLotteryCreated(Lottery lottery, address creator) internal {
+        address lotteryAddr = address(lottery);
+        lotteries.push(lottery);
+
+        emit LotteryCreate(lotteryAddr, msg.sender);
+    }
+
     function setCreationCost(uint256 cost) external override {
         creationCost = cost;
     }
 
-    function closeLottery() external isLottery(msg.sender) {
-        //Disable from casino
-        casino.setGame(Lottery(msg.sender), false);
-
-        //Delete validator data
-        delete validLotteries[msg.sender];
-
-        //Delete from active lotteries
-        lotteries[0] = lotteries[lotteries.length - 1];
-        lotteries.pop();
+    function closeLottery() external {
+        Lottery lottery = Lottery(msg.sender);
+        (uint256 index, bool found) = getLotteryIndex(lottery);
+        require(found, "Invalid lottery");
 
         //Add to db
-        database.addLottery(Lottery(msg.sender));
+        databaseGame.addGame(msg.sender);
+
+        //Disable from casino
+        casino.setGame(lottery, false);
+
+        lotteries[index] = lotteries[lotteries.length - 1];
+        lotteries.pop();
     }
 
-    function getCreatorLotteries(address creator)
-        external
+    function getLotteryIndex(Lottery lottery)
+        internal
         view
-        override
-        returns (Lottery[] memory)
+        returns (uint256 index, bool found)
     {
-        return creatorLotteries[creator];
+        uint256 size = lotteries.length;
+
+        for (uint256 i = 0; i < size; i++) {
+            if (lotteries[i] == lottery) {
+                return (i, true);
+            }
+        }
+
+        return (0, false);
+    }
+
+    function setCasino(ICasino _casino) external override onlyOwner {
+        casino = _casino;
+    }
+
+    function setGameDatabase(IDatabaseGame _dbGame)
+        external
+        override
+        onlyOwner
+    {
+        databaseGame = _dbGame;
     }
 }

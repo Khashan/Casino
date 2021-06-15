@@ -7,4 +7,6 @@ interface IGame {
     function play(uint256 _usedToken) external;
 
     function setCost(uint256 _cost) external;
+
+    function isDone() external view returns (bool);
 }

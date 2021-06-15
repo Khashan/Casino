@@ -2,7 +2,7 @@ pragma solidity ^0.8.4;
 
 import "../../libs/Game/Game.sol";
 import "./FactoryLottery.sol";
-import "hardhat/console.sol";
+import "./LotteryPhase.sol";
 
 contract Lottery is Game {
     using SafeMath for uint256;
@@ -284,7 +284,7 @@ contract Lottery is Game {
         UserInfo storage userInfo = usersInfo[user];
 
         return
-            (!isDone())
+            (!this.isDone())
                 ? _estimateTokenWonByUser(userInfo)
                 : _getTotalWonByUser(userInfo);
     }
@@ -345,18 +345,16 @@ contract Lottery is Game {
 
         currentPhase++;
 
-        if (isDone()) {
+        if (this.isDone()) {
             _end();
         }
     }
 
-    function isDone() public view returns (bool) {
+    function isDone() external view override returns (bool) {
         return currentPhase == uint8(LotteryPhase.Phase.CLOSING);
     }
 
     function _end() internal {
-        console.log("end");
-
         uint256 totalToken = lpToken.balanceOf(address(this));
         _distributeRewards();
 

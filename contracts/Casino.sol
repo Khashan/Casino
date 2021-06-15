@@ -82,6 +82,10 @@ contract Casino is Ownable, ICasino {
         games[_game] = _status;
     }
 
+    function isGame(IGame _game) external view override returns (bool) {
+        return games[IGame(_game)];
+    }
+
     function buyToken(uint256 _amount) external override hasCurrency(_amount) {
         require(_amount > 0, "Not valid amount");
 
