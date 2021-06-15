@@ -28,11 +28,18 @@ describe("Lottery", function () {
         const LotteryPhase = await ethers.getContractFactory("LotteryPhase");
         this.lotteryPhase = await LotteryPhase.deploy();
 
-        const Database = await ethers.getContractFactory("DatabaseLottery");
-        this.database = await Database.deploy();
+        const DatabaseGame = await ethers.getContractFactory("DatabaseGame");
+        this.databaseGame = await DatabaseGame.deploy();
+
+        const DatabaseUser = await ethers.getContractFactory("DatabaseUser");
+        this.databaseUser = await DatabaseUser.deploy();
+
+        this.databaseGame.setCasino(this.casino.address);
+        this.databaseUser.setCasino(this.casino.address);
+        this.casino.setDatabaseUser(this.databaseUser.address);
 
         const Factory = await ethers.getContractFactory("FactoryLottery");
-        this.factory = await Factory.deploy(this.casino.address, lottery.address, this.lotteryPhase.address, this.database.address, 100);
+        this.factory = await Factory.deploy(this.casino.address, lottery.address, this.lotteryPhase.address, this.databaseGame.address, 100);
 
         await this.casino.connect(this.owner).setFactory(this.factory.address, true);
 
@@ -71,9 +78,8 @@ describe("Lottery", function () {
             await this.token.connect(this.owner).approve(this.factory.address, INIT_POOL);
             await this.factory.connect(this.owner).createLottery(this.token.address, TICKET_COST, INIT_POOL, 0);
 
-            const lotteries = await this.factory.getCreatorLotteries(this.owner.address);
+            const lotteries = (await this.databaseUser.getUser(this.owner.address)).gamesCreated;
             official_lottery = this.Lottery.attach(lotteries[0]);
-
 
             await this.token.connect(this.user).approve(official_lottery.address, ethers.constants.MaxUint256);
             await this.token.connect(this.user2).approve(official_lottery.address, ethers.constants.MaxUint256);
@@ -162,7 +168,7 @@ describe("Lottery", function () {
         it("Next Official Lottery", async function () {
             var nextLottery = this.Lottery.attach(await this.factory.lotteries(0));
 
-            expect(await this.database.oldLottery(0)).is.equal(official_lottery.address);
+            expect((await this.databaseGame.getEndedGames())[0]).is.equal(official_lottery.address);
 
             expect(nextLottery.address).is.not.equal(official_lottery.address);
             expect(await nextLottery.currentPhase()).to.equal(0);
@@ -187,7 +193,7 @@ describe("Lottery", function () {
                 await this.casino.connect(this.user).buyToken(100);
                 await this.factory.connect(this.user).createLottery(this.usdt.address, TICKET_COST, INIT_POOL, 0);
 
-                const lotteries = await this.factory.getCreatorLotteries(this.user.address);
+                const lotteries = (await this.databaseUser.getUser(this.user.address)).gamesCreated;
                 community_unlimited = this.Lottery.attach(lotteries[0]);
 
                 expect(await community_unlimited.owner()).is.equal(this.owner.address);
@@ -199,7 +205,7 @@ describe("Lottery", function () {
                 await this.usdt.connect(this.user2).approve(this.factory.address, INIT_POOL);
                 await this.factory.connect(this.user2).createLottery(this.usdt.address, TICKET_COST, INIT_POOL, 5);
 
-                const lotteries = await this.factory.getCreatorLotteries(this.user2.address);
+                const lotteries = (await this.databaseUser.getUser(this.user2.address)).gamesCreated;
                 community_limited = this.Lottery.attach(lotteries[0]);
 
                 expect(await community_limited.owner()).is.equal(this.owner.address);
@@ -270,16 +276,14 @@ describe("Lottery", function () {
             })
 
             it("Close", async function () {
-                //await community_unlimited.changePhase();
+                await community_unlimited.changePhase();
 
                 await community_limited.changePhase();
-                console.log(await community_limited.currentPhase(), "ffwfw");
-                console.log(await community_unlimited.currentPhase(), "ddd");
 
                 await expectRevert.unspecified(this.factory.lotteries(2));
 
-                expect((await this.factory.getCreatorLotteries(this.user.address)).length).is.equal(1);
-                expect((await this.factory.getCreatorLotteries(this.user2.address)).length).is.equal(1);
+                expect((await this.databaseUser.getUser(this.user.address)).gamesCreated.length).is.equal(1);
+                expect((await this.databaseUser.getUser(this.user2.address)).gamesCreated.length).is.equal(1);
             })
         });
     })

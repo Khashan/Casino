@@ -4,12 +4,6 @@ import "../libs/ICasino.sol";
 import "../libs/Database/IDatabaseUser.sol";
 
 contract DatabaseUser is IDatabaseUser, Ownable {
-    struct User {
-        address[] gamesParticipated;
-        address[] gamesCreated;
-        address[] gamesWon;
-    }
-
     mapping(address => User) userDatas;
     ICasino public casino;
 
@@ -18,12 +12,8 @@ contract DatabaseUser is IDatabaseUser, Ownable {
     }
 
     modifier isGame {
-        require(casino.isGame(msg.sender), "Only games can call this");
+        require(casino.isGame(IGame(msg.sender)), "Only games can call this");
         _;
-    }
-
-    function getUser(address user) external view returns (User memory) {
-        return userDatas[user];
     }
 
     function userWon(address user) external override isGame {
@@ -36,5 +26,14 @@ contract DatabaseUser is IDatabaseUser, Ownable {
 
     function userJoined(address user) external override isGame {
         userDatas[user].gamesParticipated.push(msg.sender);
+    }
+
+    function getUser(address user)
+        external
+        view
+        override
+        returns (User memory)
+    {
+        return userDatas[user];
     }
 }

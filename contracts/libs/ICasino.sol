@@ -2,6 +2,7 @@ pragma solidity ^0.8.4;
 
 import "./Game/IGame.sol";
 import "./IRandomizer.sol";
+import "./Database/IDatabaseUser.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICasino {
@@ -10,6 +11,10 @@ interface ICasino {
     function setGame(IGame _game, bool _status) external;
 
     function isGame(IGame _game) external view returns (bool);
+
+    function setDatabaseUser(IDatabaseUser _dbUser) external;
+
+    function getDatabaseUser() external view returns (IDatabaseUser);
 
     function buyToken(uint256 _amount) external;
 

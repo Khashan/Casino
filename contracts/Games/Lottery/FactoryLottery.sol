@@ -61,6 +61,8 @@ contract FactoryLottery is IFactoryLottery, Ownable {
             _maxTicketPerUser,
             _gameCost
         );
+
+        _onLotteryCreated(lottery);
     }
 
     function createNextLottery(Lottery oldLottery)
@@ -75,10 +77,11 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         casino.setGame(lottery, true);
 
         lottery.clone(oldLottery);
+        _onLotteryCreated(lottery);
         return address(lottery);
     }
 
-    function _onLotteryCreated(Lottery lottery, address creator) internal {
+    function _onLotteryCreated(Lottery lottery) internal {
         address lotteryAddr = address(lottery);
         lotteries.push(lottery);
 
@@ -94,10 +97,8 @@ contract FactoryLottery is IFactoryLottery, Ownable {
         (uint256 index, bool found) = getLotteryIndex(lottery);
         require(found, "Invalid lottery");
 
-        //Add to db
         databaseGame.addGame(msg.sender);
 
-        //Disable from casino
         casino.setGame(lottery, false);
 
         lotteries[index] = lotteries[lotteries.length - 1];
@@ -105,7 +106,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
     }
 
     function getLotteryIndex(Lottery lottery)
-        internal
+        public
         view
         returns (uint256 index, bool found)
     {
@@ -117,7 +118,7 @@ contract FactoryLottery is IFactoryLottery, Ownable {
             }
         }
 
-        return (0, false);
+        return (0, true);
     }
 
     function setCasino(ICasino _casino) external override onlyOwner {

@@ -20,6 +20,8 @@ contract Casino is Ownable, ICasino {
     address private treasury;
     IRandomizer private randomizer;
 
+    IDatabaseUser private databaseUser;
+
     event BuyToken(address indexed user, uint256 amount);
     event SellToken(address indexed user, uint256 amount);
     event TransferToken(
@@ -84,6 +86,18 @@ contract Casino is Ownable, ICasino {
 
     function isGame(IGame _game) external view override returns (bool) {
         return games[IGame(_game)];
+    }
+
+    function setDatabaseUser(IDatabaseUser _dbUser)
+        external
+        override
+        onlyOwner
+    {
+        databaseUser = _dbUser;
+    }
+
+    function getDatabaseUser() external view override returns (IDatabaseUser) {
+        return databaseUser;
     }
 
     function buyToken(uint256 _amount) external override hasCurrency(_amount) {

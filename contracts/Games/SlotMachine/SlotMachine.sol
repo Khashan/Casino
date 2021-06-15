@@ -66,4 +66,8 @@ contract SlotMatchine is Game {
         winPossibilities[_index] = winPossibilities[length];
         winPossibilities.pop();
     }
+
+    function isDone() external view override returns (bool) {
+        return true;
+    }
 }

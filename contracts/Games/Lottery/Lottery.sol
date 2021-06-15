@@ -103,6 +103,7 @@ contract Lottery is Game {
         winnableNumber[3] = uint16(randoms[3]);
 
         _initDefaultDistribution();
+        casino.getDatabaseUser().userCreated(creator);
     }
 
     function _initDefaultDistribution() internal {
@@ -228,6 +229,8 @@ contract Lottery is Game {
             _verifyWinnableTicket(ticket, msg.sender);
             offset += 3;
         }
+
+        casino.getDatabaseUser().userJoined(msg.sender);
     }
 
     function _verifyWinnableTicket(Ticket memory ticket, address ticketOwner)
@@ -243,6 +246,7 @@ contract Lottery is Game {
 
         UserInfo storage userInfo = usersInfo[ticketOwner];
         userInfo.tickets.push(ticket);
+        bool notClaimed = userInfo.notClaimed;
 
         if (sameNumber[0] && sameNumber[1] && sameNumber[2] && sameNumber[3]) {
             totalWinnersPerTier[Tiers.TIER1]++;
@@ -263,6 +267,10 @@ contract Lottery is Game {
             totalWinnersPerTier[Tiers.TIER3]++;
             userInfo.ticketTiers[Tiers.TIER3]++;
             userInfo.notClaimed = true;
+        }
+
+        if (!notClaimed && userInfo.notClaimed) {
+            casino.getDatabaseUser().userWon(msg.sender);
         }
     }
 
