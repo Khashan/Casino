@@ -236,37 +236,25 @@ contract Lottery is Game {
     function _verifyWinnableTicket(Ticket memory ticket, address ticketOwner)
         internal
     {
-        bool[4] memory sameNumber =
-            [
-                _sameValueAt(0, ticket.numbers),
-                _sameValueAt(1, ticket.numbers),
-                _sameValueAt(2, ticket.numbers),
-                _sameValueAt(3, ticket.numbers)
-            ];
-
         UserInfo storage userInfo = usersInfo[ticketOwner];
         userInfo.tickets.push(ticket);
+
+        (bool[3] memory results, bool won) = _fetchResult(ticket.numbers);
         bool notClaimed = userInfo.notClaimed;
 
-        if (sameNumber[0] && sameNumber[1] && sameNumber[2] && sameNumber[3]) {
+        if (won) {
+            userInfo.notClaimed = true;
+        }
+
+        if (results[0]) {
             totalWinnersPerTier[Tiers.TIER1]++;
             userInfo.ticketTiers[Tiers.TIER1]++;
-            userInfo.notClaimed = true;
-        } else if (
-            (sameNumber[0] && sameNumber[1] && sameNumber[2]) ||
-            (sameNumber[1] && sameNumber[2] && sameNumber[3])
-        ) {
+        } else if (results[1]) {
             totalWinnersPerTier[Tiers.TIER2]++;
             userInfo.ticketTiers[Tiers.TIER2]++;
-            userInfo.notClaimed = true;
-        } else if (
-            (sameNumber[0] && sameNumber[1]) ||
-            (sameNumber[1] && sameNumber[2]) ||
-            (sameNumber[2] && sameNumber[3])
-        ) {
+        } else if (results[2]) {
             totalWinnersPerTier[Tiers.TIER3]++;
             userInfo.ticketTiers[Tiers.TIER3]++;
-            userInfo.notClaimed = true;
         }
 
         if (!notClaimed && userInfo.notClaimed) {
@@ -445,11 +433,29 @@ contract Lottery is Game {
         lpToken.safeTransfer(newLottery, tokenLeft);
     }
 
-    function _sameValueAt(uint8 index, uint16[4] memory numbers)
+    function _fetchResult(uint16[4] memory numbers)
         internal
         view
-        returns (bool)
+        returns (bool[3] memory, bool won)
     {
-        return numbers[index] == winnableNumber[index];
+        bool[4] memory matching =
+            [
+                numbers[0] == winnableNumber[0],
+                numbers[1] == winnableNumber[1],
+                numbers[2] == winnableNumber[2],
+                numbers[3] == winnableNumber[3]
+            ];
+
+        bool[3] memory results =
+            [
+                (matching[0] && matching[1] && matching[2] && matching[3]),
+                ((matching[0] && matching[1] && matching[2]) ||
+                    (matching[1] && matching[2] && matching[3])),
+                ((matching[0] && matching[1]) ||
+                    (matching[1] && matching[2]) ||
+                    (matching[2] && matching[3]))
+            ];
+
+        return (results, results[0] || results[1] || results[2]);
     }
 }

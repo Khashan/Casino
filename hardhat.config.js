@@ -18,7 +18,7 @@ module.exports = {
     currency: 'CAD',
     gasPrice: 1,
     coinmarketcap: "4c9f2d2f-ca8f-4f11-9f73-41fb621037a6",
-    enabled: false
+    enabled: true
   },
   defaultNetwork: "hardhat",
   networks: {
